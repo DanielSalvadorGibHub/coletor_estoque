@@ -60,6 +60,14 @@
   .scanbox{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#000;margin-bottom:10px}
   #reader{width:100%} #reader video{display:block;width:100%!important}
 
+  .ctrl{display:flex;gap:10px;align-items:center;margin:-4px 0 10px}
+  .ctrl button{background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    padding:11px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;flex:none}
+  .ctrl button.on{background:var(--accent);color:#041516;border-color:var(--accent)}
+  .ctrl label{flex:1;display:flex;align-items:center;gap:9px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  .ctrl label span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);font-weight:700}
+  .ctrl input[type=range]{flex:1;accent-color:var(--accent);background:none;padding:0}
   .btn{width:100%;padding:16px;border-radius:12px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans)}
   .btn-main{background:var(--accent);color:#041516}
   .btn-ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
@@ -173,6 +181,12 @@
 <div class="wrap" id="telaCaptura">
 
   <div class="scanbox"><div id="reader"></div></div>
+  <div class="ctrl hide" id="ctrl">
+    <button id="torchBtn" class="hide" onclick="lanterna()">🔦 Lanterna</button>
+    <label id="zoomBox" class="hide"><span>Zoom</span>
+      <input type="range" id="zoom" min="1" max="4" step="0.1" value="1" oninput="aplicarZoom(this.value)">
+    </label>
+  </div>
   <button class="btn btn-main" id="camBtn" onclick="toggleCam()">Ligar câmera</button>
   <button class="btn btn-main btn-lg hide" id="fotoBtn" onclick="fotografar()">Fotografar etiqueta</button>
   <div class="btn-row">
@@ -877,18 +891,119 @@ function toggleCam(){
     return say("err","Câmera indisponível","Veja o aviso vermelho no topo da tela.");
   if(typeof Html5Qrcode==="undefined")
     return say("err","Leitor não carregou","Precisa de internet na primeira abertura. Use “Digitar código”.");
-  if(camOn){ cam.stop().then(()=>{camOn=false; $("camBtn").textContent="Ligar câmera";
-    $("fotoBtn").classList.add("hide");}); return; }
+  if(camOn){ cam.stop().then(()=>{camOn=false; torchOn=false;
+    $("camBtn").textContent="Ligar câmera";
+    $("fotoBtn").classList.add("hide"); $("ctrl").classList.add("hide");
+    $("torchBtn").className="hide"; }); return; }
   cam = cam || new Html5Qrcode("reader");
   const fmt = window.Html5QrcodeSupportedFormats ? [
     Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
-    Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.DATA_MATRIX,
-    Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.ITF] : undefined;
-  cam.start({facingMode:"environment"}, {fps:12, qrbox:{width:290,height:190}, formatsToSupport:fmt}, onScan, ()=>{})
+    Html5QrcodeSupportedFormats.CODE_93, Html5QrcodeSupportedFormats.QR_CODE,
+    Html5QrcodeSupportedFormats.DATA_MATRIX, Html5QrcodeSupportedFormats.ITF,
+    Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.EAN_13] : undefined;
+
+  cam.start(
+    { facingMode: "environment" },
+    {
+      fps: 10,
+      // Caixa larga e baixa: código de barras 1D é comprido e fininho, e a
+      // caixa quadrada padrão cortava as pontas das etiquetas de ONU.
+      qrbox: (larg, alt) => ({ width: Math.floor(larg*0.92), height: Math.floor(alt*0.42) }),
+      formatsToSupport: fmt,
+      // Resolução alta importa mais que qualquer outra coisa em código pequeno.
+      videoConstraints: {
+        facingMode: "environment",
+        // Pede alto de propósito: o navegador entrega o maior modo que a
+        // câmera tiver e ignora o excesso. Depois de iniciar, prepararControles
+        // lê as capacidades reais e empurra para o máximo de verdade.
+        width:  { ideal: 3840 },
+        height: { ideal: 2160 },
+        advanced: [{ focusMode: "continuous" }]
+      },
+      // Usa o detector nativo do Android quando existe — muito mais forte que
+      // o decodificador em JavaScript, principalmente com etiqueta amassada.
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      disableFlip: true
+    },
+    onScan, ()=>{})
     .then(()=>{ camOn=true; $("camBtn").textContent="Desligar câmera"; $("aviso").classList.add("hide");
-      $("fotoBtn").classList.remove("hide");
-      say("idle","Câmera ligada","Varra a etiqueta — serial e MAC entram sozinhos."); })
+      $("fotoBtn").classList.remove("hide"); $("ctrl").classList.remove("hide");
+      say("idle","Câmera ligada","Ajustando resolução e luz…");
+      prepararControles(); })
     .catch(e=>{ const [t,m]=motivoCamera(e); say("err",t,m); });
+}
+
+/* ---------------------- lanterna e zoom ------------------------------------
+   Etiqueta de ONU é pequena e costuma estar em prateleira mal iluminada. Luz e
+   aproximação resolvem mais casos de leitura falha que qualquer ajuste de
+   algoritmo. Só aparecem se o aparelho suportar. */
+let torchOn = false;
+
+async function prepararControles(){
+  let cap = {};
+  try { cap = cam.getRunningTrackCapabilities() || {}; } catch(e){}
+
+  // 1) resolução: sobe para o máximo real da câmera
+  try{
+    if(cap.width && cap.height){
+      await cam.applyVideoConstraints({
+        width:  { ideal: cap.width.max },
+        height: { ideal: cap.height.max },
+        advanced: [{ focusMode: "continuous" }]
+      });
+    }
+  }catch(e){ /* alguns aparelhos recusam; segue no modo inicial */ }
+
+  // 2) lanterna: liga sozinha, como pedido, mas respeita quem desligou antes
+  if("torch" in cap){
+    $("torchBtn").classList.remove("hide");
+    if(st.g("lanterna", true)){
+      try{
+        await cam.applyVideoConstraints({ advanced: [{ torch: true }] });
+        torchOn = true; $("torchBtn").className = "on";
+      }catch(e){ torchOn = false; }
+    }
+  }else $("torchBtn").classList.add("hide");
+
+  // 3) zoom, se houver
+  if(cap.zoom){
+    const z=$("zoom");
+    z.min = cap.zoom.min ?? 1;
+    z.max = Math.min(cap.zoom.max ?? 4, 8);
+    z.step = cap.zoom.step || 0.1;
+    z.value = cap.zoom.min ?? 1;
+    $("zoomBox").classList.remove("hide");
+  }else $("zoomBox").classList.add("hide");
+
+  relatarCamera(cap);
+}
+
+/** Mostra o que a câmera realmente entregou — serve para saber se ajudou. */
+function relatarCamera(cap){
+  const v = document.querySelector("#reader video");
+  const larg = v && v.videoWidth, alt = v && v.videoHeight;
+  const partes = [];
+  if(larg) partes.push(larg + "×" + alt);
+  if(torchOn) partes.push("lanterna ligada");
+  if(cap && cap.zoom) partes.push("zoom disponível");
+  say("idle","Câmera ligada",
+      (partes.join("  ·  ") || "pronta") + "  —  varra a etiqueta.");
+}
+
+async function lanterna(){
+  try{
+    torchOn = !torchOn;
+    await cam.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
+    $("torchBtn").className = torchOn ? "on" : "";
+    st.s("lanterna", torchOn);          // da próxima vez abre como você deixou
+  }catch(e){
+    torchOn = false;
+    say("warn","Lanterna indisponível","Este aparelho não deixa ligar a luz pelo navegador.");
+  }
+}
+
+async function aplicarZoom(v){
+  try{ await cam.applyVideoConstraints({ advanced: [{ zoom: Number(v) }] }); }catch(e){}
 }
 
 /* --------------------------------- utilidades ----------------------------- */
