@@ -60,6 +60,15 @@
   .scanbox{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#000;margin-bottom:10px}
   #reader{width:100%} #reader video{display:block;width:100%!important}
 
+  .previa{display:flex;gap:11px;border:1px solid var(--line);border-radius:12px;
+    background:var(--panel);padding:10px;margin:12px 0}
+  .previa img{width:104px;height:104px;object-fit:cover;border-radius:9px;flex:none;background:#000}
+  .previaTxt{display:flex;flex-direction:column;gap:5px;justify-content:center;min-width:0}
+  .previaTxt b{font-size:12px}
+  .previaTxt span{font-size:11px;color:var(--ink-dim);font-family:var(--mono)}
+  .previaTxt button{align-self:flex-start;margin-top:3px;background:none;border:1px solid var(--line);
+    color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.08em;padding:7px 12px;
+    border-radius:8px;cursor:pointer}
   .ctrl{display:flex;gap:10px;align-items:center;margin:-4px 0 10px}
   .ctrl button{background:var(--panel);border:1px solid var(--line);color:var(--ink);
     padding:11px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;flex:none}
@@ -190,8 +199,15 @@
   <button class="btn btn-main" id="camBtn" onclick="toggleCam()">Ligar câmera</button>
   <button class="btn btn-main btn-lg hide" id="fotoBtn" onclick="fotografar()">Fotografar etiqueta</button>
   <div class="btn-row">
+    <button class="btn btn-ghost" onclick="$('arquivo').click()">Foto da galeria</button>
     <button class="btn btn-ghost" onclick="manual()">Digitar código</button>
-    <button class="btn btn-ghost" onclick="abrirBusca()">Escolher modelo</button>
+  </div>
+  <input type="file" id="arquivo" accept="image/*" class="hide"
+         onchange="daGaleria(this)">
+  <div id="previaBox" class="previa hide">
+    <img id="previa" alt="foto analisada">
+    <div class="previaTxt"><b>Foto analisada</b><span id="previaInfo"></span>
+      <button onclick="$('arquivo').click()">Trocar foto</button></div>
   </div>
 
   <div class="ficha">
@@ -417,6 +433,7 @@ function limpar(){
   atual = {serial:null, mac:null, produto:null, src:{}};
   ocrAutomatico = false;
   $("buscaBox").classList.add("hide"); $("results").innerHTML="";
+  $("previaBox").classList.add("hide");
   ficha();
   say("idle","Campos limpos", camOn ? "Varra a etiqueta do próximo aparelho."
                                     : "Ligue a câmera e varra a etiqueta.");
@@ -447,13 +464,61 @@ function manual(){
 async function fotografar(){
   const video = document.querySelector("#reader video");
   if(!video || !camOn) return say("warn","Câmera desligada","Ligue a câmera e enquadre a etiqueta.");
+  $("previaBox").classList.add("hide");
+  await analisar(video, $("fotoBtn"), "Fotografar etiqueta");
+}
 
-  const b=$("fotoBtn"); b.disabled=true; b.textContent="Lendo a etiqueta…";
-  say("idle","Lendo a etiqueta","Segure firme por um instante.");
+/* ------------------------------ foto da galeria ---------------------------
+   Caminho preferido quando a leitura ao vivo dá trabalho: o app de câmera do
+   celular tem foco macro, HDR e flash de verdade, e você confere se a foto
+   saiu nítida antes de mandar analisar. */
+async function daGaleria(input){
+  const file = input.files && input.files[0];
+  input.value = "";                       // permite escolher a mesma foto de novo
+  if(!file) return;
+
+  let img;
+  try{
+    img = await carregarImagem(file);
+  }catch(e){
+    return say("err","Não consegui abrir a foto",
+               "Formato não suportado. Tire de novo pela câmera do celular.");
+  }
+
+  // prévia: mostra o que foi analisado, e serve para julgar se estava nítida
+  $("previa").src = URL.createObjectURL(file);
+  $("previaInfo").textContent = `${img.width}×${img.height} · ${Math.round(file.size/1024)} KB`;
+  $("previaBox").classList.remove("hide");
+
+  await analisar(img, null, null);
+}
+
+function carregarImagem(file){
+  if("createImageBitmap" in window)
+    return createImageBitmap(file).catch(() => viaElemento(file));
+  return viaElemento(file);
+}
+
+/** Reserva para quando createImageBitmap não aceitar o formato (HEIC do iPhone). */
+function viaElemento(file){
+  return new Promise((ok,no)=>{
+    const im = new Image();
+    im.onload = () => ok(im);
+    im.onerror = () => no(new Error("formato não suportado"));
+    im.src = URL.createObjectURL(file);
+  });
+}
+
+/* ---------------------- o miolo, comum aos dois caminhos ------------------ */
+async function analisar(fonte, botao, rotuloBotao){
+  const texto0 = botao ? botao.textContent : null;
+  if(botao){ botao.disabled = true; botao.textContent = "Lendo a etiqueta…"; }
+  say("idle","Lendo a etiqueta", botao ? "Segure firme por um instante." : "Analisando a foto…");
 
   try{
-    // 1) códigos de barras: direto do vídeo, é o mais rápido e o mais exato
-    const codigos = await lerCodigos(video);
+    // 1) códigos de barras — exatos, e na foto da galeria costumam sair melhor
+    //    porque a imagem é bem maior que o quadro do vídeo
+    const codigos = await lerCodigos(fonte);
     for(const bruto of codigos){
       const {tipo, valor} = classify(bruto);
       if(tipo==="mac" && !atual.mac){ atual.mac=valor; atual.src.mac="codigo"; }
@@ -461,23 +526,21 @@ async function fotografar(){
     }
     ficha();
 
-    // 2) texto: primeira passada, etiqueta clara (a maioria)
-    let texto = await lerTexto(quadro(video, "normal"));
+    // 2) texto, etiqueta clara
+    let texto = await lerTexto(quadro(fonte, "normal"));
     let cands = casar(texto);
     let invertida = false;
 
-    // 3) só se não achou o modelo, tenta a versão invertida — é o caso das
-    //    etiquetas de fundo preto, como as da Intelbras. Fazer sempre as duas
-    //    passadas dobraria o tempo em toda leitura para ajudar numa minoria.
+    // 3) etiqueta escura (Intelbras), só se a primeira não achou o modelo
     if(!cands.length){
-      b.textContent="Tentando etiqueta escura…";
-      const texto2 = await lerTexto(quadro(video, "invertido"));
+      if(botao) botao.textContent = "Tentando etiqueta escura…";
+      say("idle","Etiqueta escura","Tentando ler o texto invertido…");
+      const texto2 = await lerTexto(quadro(fonte, "invertido"));
       const cands2 = casar(texto2);
       if(cands2.length){ cands = cands2; invertida = true; }
-      texto = texto + "\n" + texto2;          // MAC e serial podem estar em qualquer uma
+      texto = texto + "\n" + texto2;
     }
 
-    // 4) OCR preenche o que os códigos não deram
     const doTexto = extrair(texto);
     if(!atual.mac && doTexto.mac){ atual.mac=doTexto.mac; atual.src.mac="foto"; }
     if(!atual.serial && doTexto.serial){ atual.serial=doTexto.serial; atual.src.serial="foto"; }
@@ -493,7 +556,7 @@ async function fotografar(){
   }catch(e){
     say("err","Não deu para ler", String(e.message||e).slice(0,100));
   }finally{
-    b.disabled=false; b.textContent="Fotografar etiqueta";
+    if(botao){ botao.disabled=false; botao.textContent = rotuloBotao || texto0; }
   }
 }
 
@@ -559,16 +622,16 @@ function carregarScript(src){ return new Promise((ok,no)=>{
    como as da Intelbras: o OCR só entende texto escuro sobre claro. */
 const LADO_OCR = 1800;
 
-function quadro(video, modo){
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if(!vw || !vh) throw new Error("câmera sem imagem");
+function quadro(src, modo){
+  const vw = src.videoWidth || src.width, vh = src.videoHeight || src.height;
+  if(!vw || !vh) throw new Error("imagem sem tamanho");
 
   const esc = Math.min(2, LADO_OCR / Math.max(vw, vh));   // reduz o 4K, amplia o pequeno
   const c = document.createElement("canvas");
   c.width = Math.round(vw*esc); c.height = Math.round(vh*esc);
   const x = c.getContext("2d", {willReadFrequently:true});
   x.imageSmoothingQuality = "high";
-  x.drawImage(video, 0, 0, c.width, c.height);
+  x.drawImage(src, 0, 0, c.width, c.height);
 
   const img = x.getImageData(0,0,c.width,c.height), d = img.data;
   const inv = modo === "invertido";
@@ -832,6 +895,7 @@ function proximo(){
   $("linhaErro").classList.add("hide");
   $("telaCaptura").classList.remove("hide"); $("rodapeCaptura").classList.remove("hide");
   ["e1","e2","e3","e4"].forEach(id=>{ $(id).className="etapa"; $("s"+id[1]).textContent="…"; });
+  $("previaBox").classList.add("hide");
   $("vereditoBox").innerHTML=""; $("nextBtn").disabled=true; $("nextBtn").textContent="Aguarde…";
   scrollTo(0,0);
 }
