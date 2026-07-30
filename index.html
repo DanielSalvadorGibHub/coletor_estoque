@@ -69,6 +69,14 @@
 
   /* ficha do aparelho: as três coisas que precisam estar certas antes de enviar */
   .ficha{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:12px 0;overflow:hidden}
+  .fichaTopo{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);
+    background:var(--panel-2)}
+  .fichaTopo span{flex:1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-dim);font-weight:700}
+  .fichaTopo button{background:none;border:1px solid var(--line);color:var(--ink-dim);
+    font-size:10px;font-weight:700;letter-spacing:.1em;padding:6px 12px;border-radius:7px;cursor:pointer}
+  .fichaTopo button:disabled{opacity:.35}
+  .fichaTopo button:not(:disabled){color:var(--err);border-color:#4A2326}
   .campo{display:flex;align-items:center;gap:11px;padding:13px 12px;border-bottom:1px solid var(--line)}
   .campo:last-child{border-bottom:none}
   .campo .k{font-size:10px;letter-spacing:.1em;color:var(--ink-dim);width:52px;flex:none;font-weight:700}
@@ -173,6 +181,10 @@
   </div>
 
   <div class="ficha">
+    <div class="fichaTopo">
+      <span>Item em leitura</span>
+      <button onclick="limpar()" id="limparBtn">LIMPAR</button>
+    </div>
     <div class="campo" id="cSerial">
       <span class="mark"></span><span class="k">Serial</span>
       <span class="v vazio">bipe o código de barras</span>
@@ -340,15 +352,61 @@ function feed(raw){
 
   if(tipo==="mac"){
     if(atual.mac===valor) return;
-    atual.mac=valor; atual.src.mac="codigo"; buzz(35); say("ok","MAC lido",valor);
+    atual.mac=valor; atual.src.mac="codigo";
   }else{
     if(atual.serial===valor) return;
-    atual.serial=valor; atual.src.serial="codigo"; buzz(35);
-    const fab = PREFIXOS[valor.slice(0,4)];
-    say("ok","Serial lido", valor+(fab?"  ·  "+fab:""));
-    if(!atual.produto && fab) sugerirPorFabricante(fab);
+    atual.serial=valor; atual.src.serial="codigo";
   }
   ficha();
+  aposCodigo(tipo, valor);
+}
+
+/* Cada código lido pela câmera cai aqui. O objetivo é que o operador nunca
+   precise tocar em nada: varre a etiqueta, os dois campos enchem sozinhos, e o
+   modelo é identificado em seguida. */
+let ocrAutomatico = false;
+
+function aposCodigo(tipo, valor){
+  const falta = [];
+  if(!atual.serial) falta.push("serial");
+  if(!atual.mac) falta.push("MAC");
+
+  if(falta.length){
+    buzz(35);
+    const fab = tipo==="sn" ? PREFIXOS[valor.slice(0,4)] : null;
+    say("ok", tipo==="mac" ? "MAC capturado" : "Serial capturado",
+        valor + (fab ? "  ·  "+fab : "") + "  —  falta " + falta.join(" e "));
+    return;
+  }
+
+  buzz([40,60,40]);
+
+  if(atual.produto){
+    say("ok","Serial e MAC capturados","Confira a ficha e envie.");
+    return;
+  }
+  if(camOn && !ocrAutomatico){
+    // os dois códigos entraram; o modelo é a única coisa que falta e ela só
+    // existe como texto impresso, então vale disparar o OCR sem pedir
+    ocrAutomatico = true;
+    say("ok","Serial e MAC capturados","Identificando o modelo pela etiqueta…");
+    fotografar();
+  }else{
+    say("ok","Serial e MAC capturados","Escolha o modelo para poder enviar.");
+  }
+}
+
+function limpar(){
+  const temAlgo = atual.serial || atual.mac || atual.produto;
+  if(!temAlgo) return;
+  if(!confirm("Limpar serial, MAC e modelo deste item?")) return;
+  atual = {serial:null, mac:null, produto:null, src:{}};
+  ocrAutomatico = false;
+  $("buscaBox").classList.add("hide"); $("results").innerHTML="";
+  ficha();
+  say("idle","Campos limpos", camOn ? "Varra a etiqueta do próximo aparelho."
+                                    : "Ligue a câmera e varra a etiqueta.");
+  buzz(20);
 }
 
 function manual(){
@@ -620,6 +678,7 @@ function ficha(){
   ct.className="campo pronto"; ct.querySelector(".mark").textContent="✓";
   ct.querySelector(".v").className="v"; ct.querySelector(".v").textContent=TAG;
 
+  $("limparBtn").disabled = !(atual.serial || atual.mac || atual.produto);
   $("sendBtn").disabled = !(atual.serial && atual.produto);
   $("sendBtn").textContent = atual.serial && atual.produto && !atual.mac
     ? "Enviar sem MAC" : "Enviar para cadastro";
@@ -732,6 +791,7 @@ function reenviar(){ enviar(); }
 function proximo(){
   clearInterval(poll);
   atual = {serial:null, mac:null, produto:null, src:{}};
+  ocrAutomatico = false;
   ficha(); say("idle","Pronto para o próximo","Bipe a etiqueta do aparelho.");
   $("telaStatus").classList.add("hide"); $("rodapeStatus").classList.add("hide");
   $("linhaErro").classList.add("hide");
@@ -827,7 +887,7 @@ function toggleCam(){
   cam.start({facingMode:"environment"}, {fps:12, qrbox:{width:290,height:190}, formatsToSupport:fmt}, onScan, ()=>{})
     .then(()=>{ camOn=true; $("camBtn").textContent="Desligar câmera"; $("aviso").classList.add("hide");
       $("fotoBtn").classList.remove("hide");
-      say("idle","Câmera ligada","Bipe os códigos; depois toque em Ler modelo."); })
+      say("idle","Câmera ligada","Varra a etiqueta — serial e MAC entram sozinhos."); })
     .catch(e=>{ const [t,m]=motivoCamera(e); say("err",t,m); });
 }
 
