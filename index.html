@@ -35,8 +35,7 @@
   .instalar{margin:0;padding:12px 14px;background:var(--panel-2);
     border-bottom:1px solid var(--accent);font-size:13px;line-height:1.5;
     display:flex;gap:10px;align-items:center}
-  .instalar span{flex:1}
-  .instalar b{color:var(--accent)}
+  .instalar span{flex:1} .instalar b{color:var(--accent)}
   .instalar button{background:var(--accent);color:#041516;border:none;padding:9px 14px;
     border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;flex:none}
   .instalar button.x{background:none;color:var(--ink-dim);padding:9px 4px;font-size:17px}
@@ -167,9 +166,10 @@
 
   <div class="scanbox"><div id="reader"></div></div>
   <button class="btn btn-main" id="camBtn" onclick="toggleCam()">Ligar câmera</button>
+  <button class="btn btn-main btn-lg hide" id="fotoBtn" onclick="fotografar()">Fotografar etiqueta</button>
   <div class="btn-row">
-    <button class="btn btn-ghost" id="ocrBtn" onclick="lerModelo()">Ler modelo da etiqueta</button>
     <button class="btn btn-ghost" onclick="manual()">Digitar código</button>
+    <button class="btn btn-ghost" onclick="abrirBusca()">Escolher modelo</button>
   </div>
 
   <div class="ficha">
@@ -292,7 +292,10 @@ const st = (()=>{ try{ localStorage.setItem("_t","1"); localStorage.removeItem("
    de bater com o que aparece no HubSoft. */
 const TAGS = ["RETORNO DE TROCA", "RETORNO DE CANCELAMENTO", "RETORNO RECEPÇÃO"];
 
-let atual = {serial:null, mac:null, produto:null, origem:null};
+/* Cada campo guarda de onde veio: "codigo" (código de barras, confiável),
+   "foto" (OCR, precisa conferência) ou "manual". A origem decide a cor na
+   ficha — o operador tem de saber o que olhar antes de enviar. */
+let atual = {serial:null, mac:null, produto:null, src:{}};
 let TAG = st.g("tag", TAGS[0]);
 let ENDPOINT = st.g("endpoint",""), SEGREDO = st.g("segredo",""), OPERADOR = st.g("operador","");
 let cam=null, camOn=false, ultimo=0, poll=null, tally=st.g("tally",0), ocrWorker=null;
@@ -337,10 +340,10 @@ function feed(raw){
 
   if(tipo==="mac"){
     if(atual.mac===valor) return;
-    atual.mac=valor; buzz(35); say("ok","MAC lido",valor);
+    atual.mac=valor; atual.src.mac="codigo"; buzz(35); say("ok","MAC lido",valor);
   }else{
     if(atual.serial===valor) return;
-    atual.serial=valor; buzz(35);
+    atual.serial=valor; atual.src.serial="codigo"; buzz(35);
     const fab = PREFIXOS[valor.slice(0,4)];
     say("ok","Serial lido", valor+(fab?"  ·  "+fab:""));
     if(!atual.produto && fab) sugerirPorFabricante(fab);
@@ -348,59 +351,200 @@ function feed(raw){
   ficha();
 }
 
-function manual(){ const v=prompt("Serial ou MAC:"); if(v) feed(v); }
+function manual(){
+  const v=prompt("Serial ou MAC:");
+  if(!v) return;
+  const antes={s:atual.serial, m:atual.mac};
+  feed(v);
+  if(atual.serial!==antes.s) atual.src.serial="manual";
+  if(atual.mac!==antes.m) atual.src.mac="manual";
+  ficha();
+}
 
-/* ------------------------- modelo: OCR da etiqueta -------------------------
-   O código de barras traz serial e MAC, mas quase nunca o modelo — esse vem
-   impresso como texto. Por isso o OCR entra só aqui.                        */
-async function lerModelo(){
+/* =========================== FOTO DA ETIQUETA =============================
+   Uma foto, duas leituras na mesma imagem:
+
+     códigos de barras  -> exatos. O que der para ler aqui é verdade.
+     texto (OCR)        -> preenche o que faltou, mas erra 0/O, 1/I, 5/S, 8/B.
+
+   Por isso o que vem de código de barras fica verde e o que vem da foto fica
+   âmbar. Um caractere trocado num MAC vira equipamento fantasma na rede, e
+   ninguém descobre pela tela — descobre pelo cliente reclamando.
+========================================================================== */
+
+async function fotografar(){
   const video = document.querySelector("#reader video");
   if(!video || !camOn) return say("warn","Câmera desligada","Ligue a câmera e enquadre a etiqueta.");
 
-  $("ocrBtn").disabled=true; $("ocrBtn").textContent="Lendo…";
+  const b=$("fotoBtn"); b.disabled=true; b.textContent="Lendo a etiqueta…";
   say("idle","Lendo a etiqueta","Segure firme por um instante.");
-  try{
-    if(typeof Tesseract==="undefined") await carregarScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
-    if(!ocrWorker){ ocrWorker = await Tesseract.createWorker("eng");
-      await ocrWorker.setParameters({tessedit_char_whitelist:
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/. "}); }
 
-    const {data} = await ocrWorker.recognize(quadro(video));
-    const cands = casar(data.text||"");
-    if(!cands.length){
-      say("warn","Modelo não identificado","Aproxime mais ou escolha na lista.");
-      abrirBusca();
-    }else{
-      escolher(cands[0].id, "etiqueta");
-      if(cands.length>1) mostrar(cands.slice(1), "Outros parecidos");
-      say(cands[0].forte?"ok":"warn", cands[0].forte?"Modelo identificado":"Modelo provável — confira",
-          cands[0].n);
-      buzz(cands[0].forte?35:[60,40,60]);
+  try{
+    const nitido = quadro(video, false);   // para os códigos de barras
+    const forte  = quadro(video, true);    // com contraste, para o texto
+
+    const [codigos, texto] = await Promise.all([lerCodigos(nitido), lerTexto(forte)]);
+
+    const achado = {mac:null, serial:null};
+
+    // 1) códigos de barras primeiro — são exatos
+    for(const bruto of codigos){
+      const {tipo, valor} = classify(bruto);
+      if(tipo==="mac" && !achado.mac) achado.mac = valor;
+      else if(tipo==="sn" && !achado.serial) achado.serial = valor;
     }
+    for(const k of ["mac","serial"]){
+      if(achado[k]){ atual[k]=achado[k]; atual.src[k]="codigo"; }
+    }
+
+    // 2) OCR preenche só o que ficou em branco
+    const doTexto = extrair(texto);
+    if(!atual.mac && doTexto.mac){ atual.mac=doTexto.mac; atual.src.mac="foto"; }
+    if(!atual.serial && doTexto.serial){ atual.serial=doTexto.serial; atual.src.serial="foto"; }
+
+    // 3) modelo, sempre do texto
+    if(!atual.produto){
+      const cands = casar(texto);
+      if(cands.length){
+        escolher(cands[0].id, "foto");
+        if(cands.length>1) mostrar(cands.slice(1), "Não é esse? Outros parecidos");
+      }
+    }
+
+    ficha();
+    relatar(codigos.length, doTexto);
+
   }catch(e){
-    say("err","OCR falhou", String(e.message||e).slice(0,90));
-    abrirBusca();
-  }finally{ $("ocrBtn").disabled=false; $("ocrBtn").textContent="Ler modelo da etiqueta"; }
+    say("err","Não deu para ler", String(e.message||e).slice(0,100));
+  }finally{
+    b.disabled=false; b.textContent="Fotografar etiqueta";
+  }
+}
+
+/** Conta o que entrou e o que falta, em vez de só dizer "pronto". */
+function relatar(qtdCodigos, doTexto){
+  const falta = [];
+  if(!atual.serial) falta.push("serial");
+  if(!atual.mac) falta.push("MAC");
+  if(!atual.produto) falta.push("modelo");
+
+  const daFoto = Object.keys(atual.src).filter(k=>atual.src[k]==="foto").length;
+
+  if(!falta.length){
+    const msg = qtdCodigos
+      ? `${qtdCodigos} código(s) de barras lido(s)` + (daFoto?` · ${daFoto} campo(s) da foto`:"")
+      : "tudo lido do texto da etiqueta";
+    say(daFoto ? "warn" : "ok", daFoto ? "Preenchido — confira o que está em âmbar" : "Tudo lido", msg);
+    buzz(daFoto ? [60,40,60] : [40,60,40]);
+  }else{
+    say("warn","Faltou "+falta.join(" e "),
+        "Aproxime mais e fotografe de novo, ou bipe o código que faltou.");
+    buzz([70,50,70]);
+  }
+}
+
+/** Detecta TODOS os códigos de barras da imagem. Etiqueta costuma ter dois ou três. */
+async function lerCodigos(canvas){
+  if(!("BarcodeDetector" in window)) return [];   // iPhone cai aqui
+  try{
+    const det = new BarcodeDetector({formats:
+      ["code_128","code_39","code_93","qr_code","data_matrix","itf","codabar","ean_13"]});
+    const achados = await det.detect(canvas);
+    return achados.map(a=>a.rawValue).filter(Boolean);
+  }catch(e){ return []; }
+}
+
+async function lerTexto(canvas){
+  if(typeof Tesseract==="undefined")
+    await carregarScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
+  if(!ocrWorker){
+    ocrWorker = await Tesseract.createWorker("eng");
+    await ocrWorker.setParameters({tessedit_char_whitelist:
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/:. "});
+  }
+  const {data} = await ocrWorker.recognize(canvas);
+  return data.text || "";
 }
 
 function carregarScript(src){ return new Promise((ok,no)=>{
-  const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("sem internet para baixar o OCR")); document.head.appendChild(s); }); }
+  const s=document.createElement("script"); s.src=src; s.onload=ok;
+  s.onerror=()=>no(new Error("sem internet para baixar o leitor de texto")); document.head.appendChild(s); }); }
 
-/** Recorta a faixa central, amplia e aumenta o contraste — etiqueta é texto pequeno. */
-function quadro(video){
-  const vw=video.videoWidth, vh=video.videoHeight;
-  const sx=vw*0.05, sy=vh*0.18, sw=vw*0.90, sh=vh*0.64, esc=2;
-  const c=document.createElement("canvas"); c.width=sw*esc; c.height=sh*esc;
+/** Amplia a imagem. Com contraste para o texto; limpa para os códigos de barras. */
+function quadro(video, contraste){
+  const vw=video.videoWidth, vh=video.videoHeight, esc=2;
+  const c=document.createElement("canvas"); c.width=vw*esc; c.height=vh*esc;
   const x=c.getContext("2d");
-  x.drawImage(video, sx,sy,sw,sh, 0,0,c.width,c.height);
+  x.imageSmoothingQuality="high";
+  x.drawImage(video, 0,0, c.width, c.height);
+  if(!contraste) return c;
+
   const img=x.getImageData(0,0,c.width,c.height), d=img.data;
   for(let i=0;i<d.length;i+=4){
     const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-    const v=g<110?0:(g>165?255:(g-110)*255/55);   // contraste duro
+    const v=g<105?0:(g>170?255:(g-105)*255/65);
     d[i]=d[i+1]=d[i+2]=v;
   }
   x.putImageData(img,0,0);
   return c;
+}
+
+/* ------------------------- extrair MAC e serial do texto -------------------
+   A troca clássica do OCR em código impresso pequeno. Só aplico dentro de
+   trechos que já são quase hexadecimal — corrigir demais inventa dado. */
+/* SÓ letras que NÃO são hexadecimais entram aqui. B, C, D, E e F são dígitos
+   hex válidos — trocá-los destrói MAC e serial corretos, que é pior que não
+   corrigir nada. Testado: HWTC8A1B2C3D e AA:BB:CC:DD:EE:F0 têm de sair intactos. */
+const TROCA = {O:"0", Q:"0", I:"1", L:"1", J:"1", S:"5", Z:"2", G:"6", T:"7"};
+const paraHex = t => t.replace(/[OQILJSZGT]/g, c => TROCA[c]);
+const quaseHex = t => ((t.match(/[0-9A-F]/g)||[]).length / t.length) >= 0.6;
+
+function extrair(texto){
+  const T = texto.toUpperCase().replace(/[^A-Z0-9:.\-\n/ ]/g, " ");
+  const out = {mac:null, serial:null, viaRotulo:[]};
+
+  // ---- MAC: primeiro perto do rótulo, que é bem mais confiável
+  let m = T.match(/MAC[^A-Z0-9]{0,10}([0-9A-Z:.\- ]{12,26})/);
+  if(m){
+    const cand = limparHex(m[1]);
+    if(cand){ out.mac = cand; out.viaRotulo.push("MAC"); }
+  }
+  if(!out.mac){
+    for(const bruto of (T.match(/[0-9A-Z]{2}(?:[:. -]?[0-9A-Z]{2}){5}/g) || [])){
+      const cand = limparHex(bruto);
+      if(cand){ out.mac = cand; break; }
+    }
+  }
+
+  // ---- Serial GPON: 4 letras + 8 hexadecimais
+  let s = T.match(/(?:GPON\s*S\s*\/?\s*N|S\s*\/\s*N|SN|SERIAL)[^A-Z0-9]{0,10}([A-Z0-9]{8,20})/);
+  const testar = (v) => {
+    if(!v) return null;
+    const t = v.replace(/[^A-Z0-9]/g,"");
+    if(t.length < 8) return null;
+    const c = t.length >= 12 ? t.slice(0,4) + paraHex(t.slice(4,12)) : t;
+    return /^[A-Z]{4}[0-9A-F]{8}$/.test(c) ? c : (/^[A-Z0-9-]{6,24}$/.test(t) ? t : null);
+  };
+  if(s){
+    const v = testar(s[1]);
+    if(v){ out.serial = v; out.viaRotulo.push("S/N"); }
+  }
+  if(!out.serial){
+    for(const bruto of (T.match(/\b[A-Z]{4}[A-Z0-9]{8}\b/g) || [])){
+      const v = testar(bruto);
+      if(v && /^[A-Z]{4}[0-9A-F]{8}$/.test(v)){ out.serial = v; break; }
+    }
+  }
+  return out;
+}
+
+/** Devolve o MAC no formato AA:BB:CC:11:22:33, ou null se não for confiável. */
+function limparHex(bruto){
+  const t = bruto.replace(/[^A-Z0-9]/g, "");
+  if(t.length !== 12) return null;
+  if(!quaseHex(t)) return null;
+  const h = paraHex(t);
+  return /^[0-9A-F]{12}$/.test(h) ? h.match(/.{2}/g).join(":") : null;
 }
 
 /** Casa o texto lido contra os 336 produtos. Tolera 1 caractere errado nos códigos. */
@@ -458,28 +602,20 @@ function mostrar(lista, titulo){
 }
 function escolher(id, origem){
   atual.produto = PRODUTOS.find(p=>p.id===id) || null;
-  atual.origem = origem;
+  atual.src.produto = origem;
   $("buscaBox").classList.add("hide"); $("results").innerHTML=""; $("prodSearch").value="";
   ficha();
 }
 
 /* -------------------------------- a ficha -------------------------------- */
+const ROTULO = {codigo:"código de barras", foto:"lido da foto — confira", manual:"digitado"};
+
 function ficha(){
-  linha("cSerial", atual.serial, "bipe o código de barras");
-  linha("cMac", atual.mac, "bipe o segundo código");
-  const m=$("cModelo");
-  if(atual.produto){
-    m.className = "campo " + (atual.origem==="etiqueta" ? "duvida" : "pronto");
-    m.querySelector(".mark").textContent = atual.origem==="etiqueta" ? "!" : "✓";
-    m.querySelector(".v").className="v";
-    m.querySelector(".v").innerHTML = atual.produto.n +
-      (atual.origem==="etiqueta" ? "<small>lido da etiqueta — confira antes de enviar</small>"
-                                 : "<small>id "+atual.produto.id+"</small>");
-  }else{
-    m.className="campo"; m.querySelector(".mark").textContent="";
-    m.querySelector(".v").className="v vazio";
-    m.querySelector(".v").textContent="leia a etiqueta ou escolha";
-  }
+  campo("cSerial", atual.serial, "fotografe ou bipe a etiqueta", "serial");
+  campo("cMac", atual.mac, "fotografe ou bipe a etiqueta", "mac");
+  campo("cModelo", atual.produto && atual.produto.n, "fotografe ou escolha", "produto",
+        atual.produto && ("id " + atual.produto.id));
+
   const ct=$("cTag");
   ct.className="campo pronto"; ct.querySelector(".mark").textContent="✓";
   ct.querySelector(".v").className="v"; ct.querySelector(".v").textContent=TAG;
@@ -488,13 +624,20 @@ function ficha(){
   $("sendBtn").textContent = atual.serial && atual.produto && !atual.mac
     ? "Enviar sem MAC" : "Enviar para cadastro";
 }
-function linha(id, valor, vazio){
-  const e=$(id);
-  e.className = "campo"+(valor?" pronto":"");
-  e.querySelector(".mark").textContent = valor?"✓":"";
-  const v=e.querySelector(".v");
-  v.className = "v"+(valor?"":" vazio");
-  v.textContent = valor || vazio;
+
+function campo(id, valor, vazio, chave, extra){
+  const e=$(id), v=e.querySelector(".v"), src=atual.src[chave];
+  if(!valor){
+    e.className="campo"; e.querySelector(".mark").textContent="";
+    v.className="v vazio"; v.textContent=vazio; return;
+  }
+  // origem "foto" fica âmbar: OCR erra 0/O, 1/I, 5/S e 8/B, e um caractere
+  // trocado num MAC é dado errado que ninguém percebe depois
+  const duvida = src === "foto";
+  e.className = "campo " + (duvida ? "duvida" : "pronto");
+  e.querySelector(".mark").textContent = duvida ? "!" : "✓";
+  v.className="v";
+  v.innerHTML = valor + `<small>${ROTULO[src] || ""}${extra && !duvida ? " · "+extra : ""}</small>`;
 }
 
 /* --------------------------------- envio --------------------------------- */
@@ -588,7 +731,7 @@ function reenviar(){ enviar(); }
 
 function proximo(){
   clearInterval(poll);
-  atual = {serial:null, mac:null, produto:null, origem:null};
+  atual = {serial:null, mac:null, produto:null, src:{}};
   ficha(); say("idle","Pronto para o próximo","Bipe a etiqueta do aparelho.");
   $("telaStatus").classList.add("hide"); $("rodapeStatus").classList.add("hide");
   $("linhaErro").classList.add("hide");
@@ -674,7 +817,8 @@ function toggleCam(){
     return say("err","Câmera indisponível","Veja o aviso vermelho no topo da tela.");
   if(typeof Html5Qrcode==="undefined")
     return say("err","Leitor não carregou","Precisa de internet na primeira abertura. Use “Digitar código”.");
-  if(camOn){ cam.stop().then(()=>{camOn=false; $("camBtn").textContent="Ligar câmera";}); return; }
+  if(camOn){ cam.stop().then(()=>{camOn=false; $("camBtn").textContent="Ligar câmera";
+    $("fotoBtn").classList.add("hide");}); return; }
   cam = cam || new Html5Qrcode("reader");
   const fmt = window.Html5QrcodeSupportedFormats ? [
     Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
@@ -682,6 +826,7 @@ function toggleCam(){
     Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.ITF] : undefined;
   cam.start({facingMode:"environment"}, {fps:12, qrbox:{width:290,height:190}, formatsToSupport:fmt}, onScan, ()=>{})
     .then(()=>{ camOn=true; $("camBtn").textContent="Desligar câmera"; $("aviso").classList.add("hide");
+      $("fotoBtn").classList.remove("hide");
       say("idle","Câmera ligada","Bipe os códigos; depois toque em Ler modelo."); })
     .catch(e=>{ const [t,m]=motivoCamera(e); say("err",t,m); });
 }
@@ -702,7 +847,7 @@ marcaQuem(); pintaLink(); ficha(); checarContexto();
 /* ------------------------ instalação na tela de início ------------------------
    Android dispara beforeinstallprompt e dá um botão de verdade. iOS não tem
    esse evento: lá só existe Compartilhar > Adicionar à Tela de Início, então o
-   caminho tem que ser dito por escrito. */
+   caminho tem de ser dito por escrito. */
 let promptInstalar = null;
 const jaInstalado = () => window.matchMedia("(display-mode: standalone)").matches
                        || window.navigator.standalone === true;
@@ -735,7 +880,6 @@ async function instalar(){
 }
 function dispensar(){ st.s("naoInstalar", true); $("instalar").classList.add("hide"); }
 
-// iOS: sem evento, então detecta o aparelho
 const ehIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
            || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 if(ehIOS && !jaInstalado()) convite("ios");
