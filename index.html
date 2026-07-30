@@ -229,6 +229,11 @@
       <span class="v vazio">leia a etiqueta ou escolha</span>
       <button class="edit" onclick="abrirBusca()">TROCAR</button>
     </div>
+    <div class="campo hide" id="cIdent">
+      <span class="mark"></span><span class="k">Ident.</span>
+      <span class="v vazio">obrigatório na Intelbras</span>
+      <button class="edit" onclick="pedirIdent()">DIGITAR</button>
+    </div>
     <div class="campo" id="cTag">
       <span class="mark"></span><span class="k">Tag</span>
       <span class="v vazio">escolha abaixo</span>
@@ -312,7 +317,9 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const PRODUTOS = [{"id": 40, "n": "ACCESS POINT TP-LINK EAP610 INDOOR/OUTDOOR - AX1800"}, {"id": 381, "n": "ACCESS ROUTER HUAWEI EKIT AR180PRO"}, {"id": 380, "n": "ACCESS ROUTER HUAWEI EKIT AR280"}, {"id": 923, "n": "ADAPTADOR DE REDE USB 3.0 TIPO C - UE300C"}, {"id": 431, "n": "ADAPTADOR ETHERNET TP-LINK Ue300/Ue306 USB 3.0 LAN RJ GIGABIT"}, {"id": 368, "n": "BATERIA ESTACIONÁRIA 12MN1000 MOURA (60AH)"}, {"id": 1013, "n": "BATERIA ESTACIONÁRIA 12MN2000 MOURA (116AH)"}, {"id": 493, "n": "CAMERA CAMERA DOME VIP 3230 D"}, {"id": 486, "n": "CAMERA DOME VIP 1230 D G2/G4 V2"}, {"id": 487, "n": "CAMERA IP BULLET VIP 1230 B G2/G4"}, {"id": 492, "n": "CAMERA VIP 3430 D/B"}, {"id": 39, "n": "CHIP SIMCARD - DIRECT"}, {"id": 475, "n": "CIANET ONT (ONU GW24AC)"}, {"id": 928, "n": "CIANET ONU EB01 V2"}, {"id": 869, "n": "CIANET ONU GB01 V2"}, {"id": 217, "n": "CLIVADOR FC-20"}, {"id": 361, "n": "DATACOM DM986 - 416 AX30 HW2"}, {"id": 973, "n": "F. M SFP+ 10G 10KM LC BIDI DDM TX1270-RX1330NM S+23LCLC10D"}, {"id": 972, "n": "F. M SFP+ 10G 10KM LC BIDI DDM TX1330-RX1270NM S+32LCLC10D"}, {"id": 454, "n": "F. M SFP+ 10G 20KM LC BIDI DDM TX1270-RX1330NM WDM12-R20"}, {"id": 453, "n": "F. M SFP+ 10G 20KM LC BIDI DDM TX1330-RX1270NM WDM13-R20"}, {"id": 932, "n": "F.M SFP 1.25G 80KM BIDI LC DDM TX1550-RX1490NM 5424L-R80D"}, {"id": 968, "n": "F.M SFP+ 10G 20KM BIDI DDM 1270-1330NM BX20-U"}, {"id": 961, "n": "FIBERHOME AN5506-01-B"}, {"id": 328, "n": "FIBERHOME GPON AN5506-01-A (MATRIZ)"}, {"id": 367, "n": "FIBERHOME GPON AN5506-01-A MINI"}, {"id": 518, "n": "FIBERHOME GPON AN5506-02-B"}, {"id": 989, "n": "FIBERHOME GPON AN5506-02-FG"}, {"id": 981, "n": "FIBERHOME HG6821M"}, {"id": 902, "n": "FIBERHOME HG6821M 04P"}, {"id": 420, "n": "FIBERHOME ONT GPON AN5506-04-FG"}, {"id": 864, "n": "FIBERLINK PARKS 1100"}, {"id": 1008, "n": "FONTE AC S6730/5731/5732"}, {"id": 860, "n": "FONTE ALIMENTAÇÃO DATACOM PSU 125W DC -48V - (PSU 125 DC)"}, {"id": 966, "n": "FONTE DC F1A - 1000W"}, {"id": 868, "n": "FONTE DC S6730/5731/5732"}, {"id": 941, "n": "FONTE DC SWITCH 6720"}, {"id": 69, "n": "FONTE OLT VERTIV R48-2000e3 (EMERSON)"}, {"id": 1007, "n": "G/EPON ONU HG3221D-4G VSOL"}, {"id": 1006, "n": "G/EPON ONU WK-3802AW"}, {"id": 933, "n": "GBIC ELETRICA SFP 1000BASE 100M RJ45"}, {"id": 888, "n": "GPON ONT FD600-511G-HZ650"}, {"id": 884, "n": "GPON ONU FD511HZ"}, {"id": 882, "n": "GPON ONU FD604GW-DG-Z710"}, {"id": 488, "n": "GRAVADOR DIGITAL DE IMAGEM NVD 1408P"}, {"id": 994, "n": "GRAVADOR DIGITAL DE VIDEO INVD 3016-P C/HD - INTELBRAS"}, {"id": 68, "n": "HD WD PURPLE 2TB - WD22PURZ - SATA 6Gb/s"}, {"id": 70, "n": "HD WD PURPLE 4TB - WD40PURZ - SATA 6Gb/s"}, {"id": 71, "n": "HEADSET INTELBRAS WHS 60 DUO USB"}, {"id": 469, "n": "HUAWEI GPON ECHOLIFE EG8141A5"}, {"id": 371, "n": "HUAWEI GPON ONU/ONT ECHOLIFE HS8546V5"}, {"id": 905, "n": "HUAWEI SWITCH 48P S6720-54C-EI-48S"}, {"id": 309, "n": "IDENTIFICADOR DE CABOS - FIBRA ATIVA - KFI-40V KOMSHINE (SERIAL)"}, {"id": 446, "n": "IDENTIFICADOR DE CABOS - FIBRA ATIVA - ORIENTEK TFI-40"}, {"id": 494, "n": "IMPRESSORA HP LASERJET MFP M28W"}, {"id": 1000, "n": "INVERSOR (DIVERSOS)"}, {"id": 998, "n": "MACBOOK APPLE A3240 M4 16GB 256GB"}, {"id": 999, "n": "MACBOOK APPLE A3449 M5 16GB 1TB"}, {"id": 896, "n": "MACBOOK MODELO A2337"}, {"id": 500, "n": "MAQUINA DE FUSAO O-TECH H0EA3000"}, {"id": 451, "n": "MAQUINA DE FUSAO ORIENTEK T40"}, {"id": 445, "n": "MAQUINA DE FUSAO ORIENTEK T45"}, {"id": 416, "n": "MAQUINA DE FUSÃO FUJIKURA 26S"}, {"id": 462, "n": "MAQUINA DE FUSÃO FUJIKURA 36S"}, {"id": 421, "n": "MAQUINA DE FUSÃO FUJIKURA 70S"}, {"id": 447, "n": "MAQUINA DE FUSÃO KOMSHINE FX39 (EKTECH)"}, {"id": 455, "n": "MAQUINA DE FUSÃO OPTICAL FIBER FUSION SPLICER AI9"}, {"id": 471, "n": "MAQUINA DE FUSÃO ORIENTEK T37"}, {"id": 443, "n": "MAQUINA DE FUSÃO ORIENTEK T49"}, {"id": 457, "n": "MAQUINA DE FUSÃO SUMITOMO T-400S"}, {"id": 1012, "n": "MERCUSYS HALO H30G"}, {"id": 946, "n": "MICROCOMPUTADOR DELL PRO QCM1250"}, {"id": 495, "n": "MICROCOMPUTADOR NTC PC HOME - I5 8301 e 801 GA10G (I5-10400/8GB/SSD240GB)"}, {"id": 483, "n": "MICROCOMPUTADOR NTC PC I3 4115"}, {"id": 931, "n": "MIKROTIK CLOUD CORE ROUTER CCR1009-7G-1C-1S+PC"}, {"id": 866, "n": "MIKROTIK CLOUD CORE ROUTER CCR1036-8G-2S+ EM"}, {"id": 992, "n": "MIKROTIK CLOUD CORE ROUTER CCR2116-12G-4S+"}, {"id": 980, "n": "MIKROTIK CRS328-24P-4S+RM"}, {"id": 887, "n": "MIKROTIK CRS328-4C-20S-4S+RM"}, {"id": 501, "n": "MIKROTIK RB951G-2HnD"}, {"id": 993, "n": "MIKROTIK ROUTERBOARD CCR1016-12G"}, {"id": 910, "n": "MIKROTIK ROUTERBOARD RB 2011UIAS-RM"}, {"id": 911, "n": "MIKROTIK ROUTERBOARD RB 3011UIAS-RM"}, {"id": 478, "n": "MIKROTIK ROUTERBOARD RB 750GL"}, {"id": 480, "n": "MIKROTIK ROUTERBOARD RB 750GR3"}, {"id": 388, "n": "MIKROTIK ROUTERBOARD RB 750R2 HEX LITE"}, {"id": 479, "n": "MIKROTIK ROUTERBOARD RB 750UPR2 HEX POE LITE"}, {"id": 516, "n": "MIKROTIK ROUTERBOARD RB2011iLS-IN"}, {"id": 496, "n": "MONITOR AOC 21,5\" E2270SWHEN"}, {"id": 893, "n": "MONITOR DELL 22\" SE2225HMo"}, {"id": 1018, "n": "MONITOR DELL 24' SE2426H"}, {"id": 384, "n": "MONITOR LG 19'5 LED 20MK400H(HDMI/VGA/VESA/1366X768)"}, {"id": 442, "n": "MOUSE PAD / BASE PARA MOUSE"}, {"id": 358, "n": "MULTILASER ROTEADOR 300 MBPS RE163 / RE163V"}, {"id": 459, "n": "MULTILAZER RE047 150 MBPS"}, {"id": 435, "n": "NOKIA G-240W-C"}, {"id": 400, "n": "NOKIA WIFI BEACON HA-020W-B"}, {"id": 861, "n": "NOTEBOOK ACER - SF314-59-750QC - MODEL N19C4 - I7-8GB/256SSD/14\""}, {"id": 917, "n": "NOTEBOOK ACER ASPIRE 5 15 i7 12ªGeração"}, {"id": 497, "n": "NOTEBOOK ACER ASPIRE E1 - MODEL Z5WE3"}, {"id": 489, "n": "NOTEBOOK ACER ASPIRE GO 15 - MODELO N23C3 i7 16GB/512GB"}, {"id": 955, "n": "NOTEBOOK DELL (DIVERSOS)"}, {"id": 895, "n": "NOTEBOOK DELL 15 DC15250"}, {"id": 894, "n": "NOTEBOOK DELL ALIENWARE AURORA 16 AC16250"}, {"id": 979, "n": "NOTEBOOK DELL VOSTRO P89G"}, {"id": 1010, "n": "NOTEBOOK HP (DIVERSOS)"}, {"id": 490, "n": "NOTEBOOK HP LAPTOP 14-EM0085CL"}, {"id": 1005, "n": "NOTEBOOK LENOVO (DIVERSOS)"}, {"id": 498, "n": "NOTEBOOK LENOVO IDEAPAD 3 15ITL6"}, {"id": 499, "n": "NOTEBOOK LENOVO THINKPAD E14 GEN 2 20TB"}, {"id": 891, "n": "OLT DATACOM DM4615 16GPON + 4GT + 4XS"}, {"id": 452, "n": "OLT FIBERHOME AN5516-01 FBH 11U 10G 2*HU2A+2*HSWA SEM BOARD 10 VENT"}, {"id": 935, "n": "OLT FIBERHOME AN5516-04 SEM BOARD"}, {"id": 952, "n": "OLT FIBERHOME AN5516-06 FBH 10G 1*HU2A+2*HSWA SEM BOARD"}, {"id": 991, "n": "OLT FIBERHOME AN5516-06B FBH 10G 2*HU1A+2*HSWA SEM BOARD"}, {"id": 853, "n": "OLT FIBERHOME AN6000-15 FBH 11U 10G 1*HSCA 2*PIBA SEM BOARD"}, {"id": 1023, "n": "OLT GEPON CIANET E8PS"}, {"id": 528, "n": "ONT 142N W"}, {"id": 510, "n": "ONT CHINA G-140W-ME"}, {"id": 472, "n": "ONT DATACOM DM985-424 HW3"}, {"id": 434, "n": "ONT DATACOM DM986-414"}, {"id": 437, "n": "ONT FAST WIRELESS XPON FW323DAC WIFI"}, {"id": 150, "n": "ONT FIBERHOME HG6143D"}, {"id": 151, "n": "ONT FIBERHOME HG6245D"}, {"id": 152, "n": "ONT FIBERHOME/INTELBRAS AC1200 HG6145D2"}, {"id": 149, "n": "ONT FIBERHOME/INTELBRAS HG6145F3 AX3000"}, {"id": 1027, "n": "ONT FURUKAWA FBS 423-41W/AC"}, {"id": 862, "n": "ONT FURUKAWA FBS LD1102W"}, {"id": 970, "n": "ONT G/EPON 02GW"}, {"id": 350, "n": "ONT GPON WIFI AC - CHINA - G-140W-MF 1POT+4GE 2.4/5GHZ 2USB"}, {"id": 1020, "n": "ONT HUAWEI ECHOLIFE EG8120L"}, {"id": 364, "n": "ONT HUAWEI ECHOLIFE EG8145V5 / EG8145V5 - V2"}, {"id": 957, "n": "ONT HUAWEI ECHOLIFE HG8120H"}, {"id": 394, "n": "ONT HUAWEI ECHOLIFE HG8145V5 / HG8145V5-V2"}, {"id": 921, "n": "ONT HUAWEI ECHOLIFE HG8245H"}, {"id": 995, "n": "ONT HUAWEI ECHOLIFE HG8245Q2"}, {"id": 967, "n": "ONT HUAWEI ECHOLIFE HG8245W5-6T"}, {"id": 373, "n": "ONT HUAWEI ECHOLIFE HG8546M"}, {"id": 971, "n": "ONT HUAWEI ECHOLIFE HS8545M5"}, {"id": 386, "n": "ONT HUAWEI OPTIXSTAR EG8145X6 / EG8145X6-10 GPON"}, {"id": 873, "n": "ONT HUAWEI OPTIXSTAR HG8145X6"}, {"id": 922, "n": "ONT HUAWEI OPTIXSTAR HG8145X6-10-V2"}, {"id": 951, "n": "ONT HUAWIE OPTIXSTAR EG8041X6-10"}, {"id": 86, "n": "ONT INTELBRAS WIFIBER AX1800 (WIFI 6)"}, {"id": 87, "n": "ONT INTELBRAS WIFIBER AX1800V (WIFI 6) - C/ PORTA FXS + USB"}, {"id": 88, "n": "ONT INTELBRAS WIFIBER AX3000V 4LAN 2FXS 1USB"}, {"id": 1022, "n": "ONT MAXPRINT MAXFIBER 1200G2 FXS"}, {"id": 391, "n": "ONT MITRASTAR GPT-2741 GNAC-N2"}, {"id": 977, "n": "ONT MULTILASER ZTE MODELO F660 V7.1"}, {"id": 362, "n": "ONT MULTILASER ZTE MODELO ZXHN F601"}, {"id": 372, "n": "ONT MULTILASER ZTE MODELO ZXHN F670L"}, {"id": 360, "n": "ONT NOKIA G-0425G-C"}, {"id": 349, "n": "ONT NOKIA G-140W-H"}, {"id": 348, "n": "ONT NOKIA G-1425G-A"}, {"id": 333, "n": "ONT NOKIA G-1425G-B"}, {"id": 369, "n": "ONT NOKIA G-240W-G"}, {"id": 366, "n": "ONT NOKIA G-2425G-A"}, {"id": 950, "n": "ONT RAISECOM HT803G-WS2"}, {"id": 982, "n": "ONT SHORELINE XPON SH1020W"}, {"id": 363, "n": "ONT STAVIX / MP - G421R"}, {"id": 987, "n": "ONT STAVIX MP - G421RQ"}, {"id": 919, "n": "ONT STAVIX MP-X421RQ-F"}, {"id": 876, "n": "ONT SUMEC SM164242"}, {"id": 332, "n": "ONT TENDA AC1200 GPON ONT HG9"}, {"id": 334, "n": "ONT TP-LINK XC220-G3 AC1200 GPON ROUTER"}, {"id": 325, "n": "ONT TP-LINK XC220-G3v AC1200 VoIP GPON ROUTER C FXS"}, {"id": 89, "n": "ONT TP-LINK XX230v AX1800 DUAL BAND WIFI6 GPON ROUTER"}, {"id": 90, "n": "ONT TP-LINK XX530v AX3000 DUAL BAND WIFI6 GPON ROUTER 1X FXS 1X USB"}, {"id": 91, "n": "ONT TP-LINK XX530v AX3000 XPON DUAL BAND WIFI6"}, {"id": 1004, "n": "ONT TP-LINK XX535 AX3000 DUAL-BAND WI-FI 6 XPON"}, {"id": 986, "n": "ONT UNEE UN1200X-AC"}, {"id": 444, "n": "ONT VSOL G/EPON HG323DAC"}, {"id": 392, "n": "ONT VSOL G/EPON V2802DAC - 2GE+2WIFI"}, {"id": 376, "n": "ONT WIFI AC - NOKIA - G-140W-C 1POT+4GE 2.4/5GHZ 2USB"}, {"id": 92, "n": "ONT WIFIBER 121 AC INTELBRAS (MATRIZ)"}, {"id": 916, "n": "ONT ZTE GIGA MODELO ZXHN F6600P"}, {"id": 401, "n": "ONT ZTE MODELO ZXHN F612"}, {"id": 351, "n": "ONT ZTE ZXHN F660"}, {"id": 374, "n": "ONT ZTE ZXHN F673AV9"}, {"id": 1029, "n": "ONT ZTE ZXHNF6201B"}, {"id": 93, "n": "ONU 110 - INTELBRAS - GPON (MATRIZ)"}, {"id": 94, "n": "ONU 110 B - INTELBRAS - GPON (MATRIZ)"}, {"id": 95, "n": "ONU 110 G / INTELBRAS E FURUKAWA"}, {"id": 953, "n": "ONU 1GE G/EPON HYBRID"}, {"id": 379, "n": "ONU D-NET DN-GPON-1010-MX"}, {"id": 365, "n": "ONU DATACOM DM986-100"}, {"id": 508, "n": "ONU DIGISTAR GRG-21000"}, {"id": 370, "n": "ONU DIGISTAR GRG-31000"}, {"id": 393, "n": "ONU FAST WIRELESS XPON FW2801SG"}, {"id": 997, "n": "ONU FIBERHOME GPON AN5506-04"}, {"id": 337, "n": "ONU FURUKAWA MODELO 630-10B"}, {"id": 339, "n": "ONU FURUKAWA MODELO 640-10B"}, {"id": 327, "n": "ONU FURUKAWA MODELO LD-1102W"}, {"id": 347, "n": "ONU FURUKAWA MODELO LD420-10R GPON"}, {"id": 468, "n": "ONU G/EPON CONNECT"}, {"id": 343, "n": "ONU G/EPON xPON AZUL (MATRIZ)"}, {"id": 485, "n": "ONU GL-G8010U-FZ"}, {"id": 907, "n": "ONU GPON GP-125"}, {"id": 949, "n": "ONU GPON HUAWEI F6610M"}, {"id": 467, "n": "ONU GPON MULTILASER RE709"}, {"id": 389, "n": "ONU GPON TX-6610"}, {"id": 387, "n": "ONU GPON XZ000-G3"}, {"id": 390, "n": "ONU HUAWEI ECHOLIFE HG8010H"}, {"id": 383, "n": "ONU HUAWEI ECHOLIFE HG8310M"}, {"id": 357, "n": "ONU HUAWEI EG8010H"}, {"id": 335, "n": "ONU HUAWEI GPON HG8110H"}, {"id": 1016, "n": "ONU MULTILASER RE880"}, {"id": 96, "n": "ONU R1 (MATRIZ)"}, {"id": 901, "n": "ONU RAISECOM HT803G-1GE"}, {"id": 476, "n": "ONU STAVIX MINI3 MP-G100Z - MP-G100R1"}, {"id": 352, "n": "ONU SUMEC (USO TODAS)"}, {"id": 521, "n": "ONU WIFI 6 F6630M"}, {"id": 954, "n": "ONU XPON XP-125"}, {"id": 886, "n": "ONU XPON XZ000-G7"}, {"id": 523, "n": "ONU ZTE MODELO ZXHN F643 - ZXA10 F601"}, {"id": 456, "n": "OTDR EKTECH QX55-P"}, {"id": 448, "n": "OTDR ORIENTEK MINI K330"}, {"id": 458, "n": "OTDR ORIENTEK T303"}, {"id": 417, "n": "OTDR ORIENTEK TR600"}, {"id": 904, "n": "PARKS FIBERLINK 100"}, {"id": 102, "n": "PARKS FIBERLINK 101 (MATRIZ)"}, {"id": 838, "n": "PLACA FIBERHOME UPLINK HU8A - LINHA 6000"}, {"id": 940, "n": "PLACA GCOB GPON 16 PORTAS C+ T1A SERIES RP1000 - R1A"}, {"id": 470, "n": "PLACA GPON FIBERHOME 5516-01 10-OLT GCOB 16 PORTAS C+ S1B - R1P"}, {"id": 1011, "n": "PLACA GPON FIBERHOME 5516-010 OLT EC8B C+ 8 PORTAS"}, {"id": 385, "n": "PLACA GPON FIBERHOME 5516-010 OLT GC8B C+ 8 PORTAS - R1P"}, {"id": 512, "n": "PLACA GPON FIBERHOME 5516-010 OLT GC8B C+ 8 PORTAS - S1B"}, {"id": 990, "n": "PLACA GPON FIBERHOME AN6000 OLT GPOA C+ 16 PORTAS - R1A/R2A"}, {"id": 840, "n": "PLACA GPON/XGS-PON FIBERHOME AN6000 OLT GFOA C+ 16 PORTAS"}, {"id": 1017, "n": "PLACA HUAWEI XSIC-C16H000 16X100GE S6780"}, {"id": 843, "n": "PLACA KU1B UPLINK FIBERHOME 100G - LINHA AN6000"}, {"id": 1033, "n": "PLACA S12700E SW HUAWEI 48/100GE QSFP28 LST7C24HX6E0"}, {"id": 415, "n": "POWER METER PON TPN-35 / KPN-35 ORIENTEK/KOMSHINE"}, {"id": 1032, "n": "POWER METTER PON JW3213B"}, {"id": 183, "n": "PROTETOR SOLAR FPS 60 - 2L"}, {"id": 502, "n": "QSFP 100G 10KM LR4-HWEI 1310NM"}, {"id": 975, "n": "QSFP28 100G 100M 850NM SR4 MM 4 WAVE MPO MMF - QSFP28-100G-SR4"}, {"id": 985, "n": "QSFP28 100G 20KM 1310NM LR4 4 WAVE DUPLEX LC SM"}, {"id": 962, "n": "QSFP28 100G 20KM PAM4 LC BIDI SIMPLEX HIGH WAVE DDM HUAWEI"}, {"id": 963, "n": "QSFP28 100G 20KM PAM4 LC BIDI SIMPLEX LOW WAVE DDM JUNIPER"}, {"id": 504, "n": "QSFP28 100G 40KM PAM4 LC BIDI SIMPLEX HIGH WAVE DDM HUAWEI"}, {"id": 505, "n": "QSFP28 100G 40KM PAM4 LC BIDI SIMPLEX LOW WAVE DDM JUNIPER"}, {"id": 1031, "n": "QSFP28 100G 80KM ZR4 1310NM LWDM wavelength LC SMF"}, {"id": 503, "n": "QSFP56DD 400G 10KM LR4 CWDM4 LC DDM"}, {"id": 988, "n": "QSFP56DD 400G 2KM FR4 CWDM4 LC DDM"}, {"id": 507, "n": "QSFP56DD 400G 30KM ER4 SMF/LC C-Temp DDM"}, {"id": 984, "n": "ROTEADOR 300 MPS RE707"}, {"id": 436, "n": "ROTEADOR ACTION RF 1200 (INTELBRAZ) MATRIZ"}, {"id": 123, "n": "ROTEADOR ACTION RG 1200 INTELBRAS (MATRIZ)"}, {"id": 906, "n": "ROTEADOR CIANET (RW 300N)"}, {"id": 517, "n": "ROTEADOR D-LINK DIR-615"}, {"id": 482, "n": "ROTEADOR D-LINK DIR-841 AC1200"}, {"id": 346, "n": "ROTEADOR D-LINK DIR-842"}, {"id": 345, "n": "ROTEADOR FURUKAWA FBS MODELO LD421-21W"}, {"id": 419, "n": "ROTEADOR GREATEK GIGABIT GWR1200AC"}, {"id": 338, "n": "ROTEADOR HUAWEI WIFI 6 WS7001-40 AX2 / WS7001"}, {"id": 353, "n": "ROTEADOR HUAWEI WIFI AX2S WS7000 V2"}, {"id": 340, "n": "ROTEADOR HUAWEI WIFI AX3S"}, {"id": 433, "n": "ROTEADOR HUAWEI WS5200V2 GIGA AC12004 ANT BC HUAWEI"}, {"id": 336, "n": "ROTEADOR HUAWEI WS5200V3 GIGA AC1300"}, {"id": 329, "n": "ROTEADOR INTELBRAS AC GIGA GF 1200 (MATRIZ)"}, {"id": 320, "n": "ROTEADOR INTELBRAS RX 1500 WIFI 6 (MATRIZ)"}, {"id": 889, "n": "ROTEADOR INTELBRAS W4-300F"}, {"id": 341, "n": "ROTEADOR MERCUSYS AC1200 AC12G"}, {"id": 474, "n": "ROTEADOR MERCUSYS MR30G AC1200"}, {"id": 473, "n": "ROTEADOR MERCUSYS MR70X"}, {"id": 525, "n": "ROTEADOR MERCUSYS MW301R 300MBPS"}, {"id": 874, "n": "ROTEADOR MERCUSYS MW325R 300MBPS"}, {"id": 1021, "n": "ROTEADOR MESH AC1200 RE010 MULTILASER"}, {"id": 875, "n": "ROTEADOR MULTILASER (RE708)"}, {"id": 969, "n": "ROTEADOR MULTILASER RE015"}, {"id": 897, "n": "ROTEADOR MULTILASER RE018"}, {"id": 399, "n": "ROTEADOR NE40E-M2KB EXPANSIVEL, 4*40GE+10*10GE, 2 FONTES AC"}, {"id": 959, "n": "ROTEADOR TDA NW1150"}, {"id": 439, "n": "ROTEADOR TENDA AC8"}, {"id": 481, "n": "ROTEADOR TENDA N301 300MBPS"}, {"id": 355, "n": "ROTEADOR TP-LINK (ARCHER C5W BRANCO)"}, {"id": 321, "n": "ROTEADOR TP-LINK - EC220-G5"}, {"id": 974, "n": "ROTEADOR TP-LINK - EC225-G5"}, {"id": 885, "n": "ROTEADOR TP-LINK AC1200 (ARCHER XR500V)"}, {"id": 432, "n": "ROTEADOR TP-LINK AC1200 / AC1300 (ARCHER C6)"}, {"id": 331, "n": "ROTEADOR TP-LINK ARCHER C20 - AC750 MBPS"}, {"id": 965, "n": "ROTEADOR TP-LINK ARCHER C21 AC750 DUAL BAND"}, {"id": 408, "n": "ROTEADOR TP-LINK ARCHER C5V (PRETO COM TELEFONIA)"}, {"id": 892, "n": "ROTEADOR TP-LINK AX1500 EX141"}, {"id": 964, "n": "ROTEADOR TP-LINK EX220 AX1800 DUAL BAND WIFI6"}, {"id": 124, "n": "ROTEADOR TP-LINK EX521 AX3000 WIFI 6 DUAL-BAND"}, {"id": 125, "n": "ROTEADOR TP-LINK TL WR749N 150MBPS"}, {"id": 126, "n": "ROTEADOR TP-LINK TL WR829N 300MBPS"}, {"id": 976, "n": "ROTEADOR TP-LINK TL-WR740N 150MBPS"}, {"id": 506, "n": "ROTEADOR TP-LINK TL-WR820N 300MBPS"}, {"id": 344, "n": "ROTEADOR TP-LINK TL-WR840N 300Mbps"}, {"id": 1024, "n": "ROTEADOR TP-LINK TL-WR841N 300MBPS"}, {"id": 131, "n": "ROTEADOR TP-LINK TL-WR849N-BR N 300MBPS"}, {"id": 915, "n": "ROTEADOR TP-LINK TL-WR940N 450MBPS"}, {"id": 127, "n": "ROTEADOR WIRELESS HOTSPOT"}, {"id": 870, "n": "ROTEADOR WIRELESS IWR 1000N 150Mbps (MATRIZ)"}, {"id": 128, "n": "ROTEADOR WIRELESS IWR 3000Mbps INTELBRAS (MATRIZ)"}, {"id": 129, "n": "ROTEADOR WIRELESS KLR 300 / 301"}, {"id": 130, "n": "ROTEADOR WIRELESS RF 301K 300Mbps INTELBRAS (MATRIZ)"}, {"id": 466, "n": "ROTEADOR WIRELESS W5-1200F INTELBRAS"}, {"id": 132, "n": "ROTEADOR WIRELESS W5-1200G INTELBRAS"}, {"id": 322, "n": "ROTEADOR WIRELESS W5-1200GS INTELBRAS"}, {"id": 133, "n": "ROTEADOR WIRELESS W5-2100G INTELBRAS"}, {"id": 996, "n": "ROTEADOR WIRELESS WIN 300 INTELBRAS"}, {"id": 1028, "n": "ROTEADOR WIRELESS WRN 342 SLIM N300"}, {"id": 1009, "n": "ROTEADOR WRN 150 - INTELBRAS (CYBER)"}, {"id": 354, "n": "ROTEADOR ZTE ZXHN H198A"}, {"id": 375, "n": "ROTEADOR ZTE ZXHN H199A"}, {"id": 134, "n": "ROTEADOR/ACESS POINT CORPORATIVO AP 1210 AC"}, {"id": 956, "n": "SERVIDOR DELL POWEREDGE R7615 - GGC - Global Google Cache"}, {"id": 461, "n": "SFP+ 10G 10KM LC DUPLEX DDM 1310NM 10G LR"}, {"id": 938, "n": "SFP+ 10G 40KM ER DDM 1550nm"}, {"id": 934, "n": "SFP+ 10G 40KM TX1270/RX1330NM 40KM BIDI SFP+ - WDM12-R40"}, {"id": 939, "n": "SFP+ 10G 40KM TX1330-RX1270NM LC BIDI SFP+ WDM13-R40"}, {"id": 912, "n": "SFP+ 10G 80KM BIDI 1330NM-1270NM BX80D-I C/CISCO"}, {"id": 913, "n": "SFP+ 10G 80KM BIDI1270NM-1330NM BX80U-I C/CISCO"}, {"id": 937, "n": "SFP+ 10G 850NM 300m TXM431 - SR"}, {"id": 914, "n": "SFP+ 10G LR 10KM SM LC DUPLEX DDM 1310NM TXM431-LR"}, {"id": 942, "n": "SFP+ 10G SR 850NM 300M MMF S+85DLC03D"}, {"id": 872, "n": "STORAGE DELL - POWERSTORE 500T (RAM 192GB, 10x SSD 3.84TB, RACK 9U, 4x TRANSCEPTOR OPTICO PADRAO SFP, 25GBE OPTICO (2x)"}, {"id": 850, "n": "SWITCH DATACOM - DM4380 12XS+3CX"}, {"id": 918, "n": "SWITCH DATACOM DM4270 24XS+2CX"}, {"id": 930, "n": "SWITCH DE ACESSO DATACOM - DM 4370 4GT+4GX+4XS"}, {"id": 867, "n": "SWITCH HUAWEI S6730 H24X6C"}, {"id": 148, "n": "TELEFONE COM FIO INTELBRAS TC20"}, {"id": 943, "n": "TELEFONE IP - TIP 125i"}, {"id": 1003, "n": "TP-LINK XX535 AX3000 DUAL-BAND WI-FI 6 XPON"}, {"id": 871, "n": "TUNING BOX - QSFP-DD/S FP-DD - TN100-QSDD-PL"}, {"id": 477, "n": "WIFI EPON ONU (HGW)"}, {"id": 960, "n": "WIRELESS RG-AP850-I(V2)(OT)"}, {"id": 929, "n": "XFP 10G BIDI 20KM LC 1270-1330NM WDM12-R20"}, {"id": 863, "n": "XFP 10G BIDI 20KM LC 1330-1270NM WDM13-R20"}, {"id": 527, "n": "XFP 10G LR LC 10KM 1310NM DUPLEX"}, {"id": 883, "n": "XPON ONU FD604GW-DG"}, {"id": 978, "n": "ZTE ZXHN H3601P"}];
-const PREFIXOS = {HWTC:"Huawei", ZTEG:"ZTE", ALCL:"Nokia/Alcatel", FHTT:"Fiberhome", TPLG:"TP-Link"};
+const PREFIXOS = {HWTC:"Huawei", ZTEG:"ZTE", ALCL:"Nokia/Alcatel", FHTT:"Fiberhome",
+                  TPLG:"TP-Link", MSTC:"Mitrastar", ITBS:"Intelbras", CMSZ:"ZTE",
+                  RAIS:"Raisecom", DSNW:"Datacom"};
 
 const $=id=>document.getElementById(id);
 const norm=s=>String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
@@ -379,8 +386,9 @@ function escolherTag(t){ TAG=t; st.s("tag",t); pintaTags(); ficha(); }
 ========================================================================= */
 
 const PESO = {codigo:100, rotulo:60, solto:40};
-let evid = {serial:{}, mac:{}, produto:{}};
+let evid = {serial:{}, mac:{}, produto:{}, identificador:{}};
 let fotos = [];
+let sobras = [];   // códigos vistos na etiqueta que não viraram MAC nem serial
 
 function registrar(campo, valor, peso, origem){
   if(valor === null || valor === undefined || valor === "") return;
@@ -411,8 +419,12 @@ function consolidar(campo){
   };
 }
 
+/* Alguns modelos Intelbras só entram no HubSoft com o identificador próprio
+   preenchido. Para as outras marcas o campo nem aparece. */
+const ehIntelbras = () => !!atual.produto && /INTELBRAS/i.test(atual.produto.n);
+
 function aplicarEvidencias(){
-  for(const campo of ["serial","mac"]){
+  for(const campo of ["serial","mac","identificador"]){
     const c = consolidar(campo);
     atual[campo] = c ? c.valor : null;
     atual.src[campo] = c;
@@ -466,9 +478,9 @@ function limpar(){
 
 function zerar(){
   atual = {serial:null, mac:null, produto:null, src:{}};
-  evid = {serial:{}, mac:{}, produto:{}};
+  evid = {serial:{}, mac:{}, produto:{}, identificador:{}};
   fotos.forEach(f => URL.revokeObjectURL(f.url));
-  fotos = [];
+  fotos = []; sobras = [];
   $("fotos").classList.add("hide"); $("fotos").innerHTML = "";
   $("buscaBox").classList.add("hide"); $("results").innerHTML = "";
   ficha();
@@ -490,6 +502,25 @@ async function daFoto(input){
   pintarFotos();
 
   await analisar(img, file, n);
+}
+
+function usarIdent(v){
+  registrar("identificador", v, 200, "escolhido na etiqueta");
+  aplicarEvidencias();
+  say("ok","Identificador definido", v);
+  buzz(30);
+}
+
+function pedirIdent(){
+  const v = prompt("Identificador próprio (como aparece na etiqueta):",
+                   atual.identificador || "");
+  if(v === null) return;
+  const t = v.trim().toUpperCase();
+  if(!t) return;
+  registrar("identificador", t, 200, "digitado");
+  aplicarEvidencias();
+  say("ok","Identificador registrado", t);
+  buzz(30);
 }
 
 function pintarFotos(){
@@ -530,15 +561,16 @@ async function analisar(img, file, n){
     }
     aplicarEvidencias();
 
-    // 2) texto, etiqueta clara
+    // 2) texto: o modo "auto" já lida com etiqueta mista (clara + faixa preta)
     say("idle", `Analisando foto ${n}`, "Lendo o texto da etiqueta…");
-    let texto = await lerTexto(quadro(img, "normal"));
+    let texto = await lerTexto(quadro(img, "auto"));
     let cands = casar(texto);
 
-    // 3) etiqueta escura (Intelbras) — só quando a primeira passada não achou
-    if(!cands.length){
-      say("idle", `Analisando foto ${n}`, "Tentando como etiqueta escura…");
-      const t2 = await lerTexto(quadro(img, "invertido"));
+    // 3) reserva: se nem o modelo nem os dois códigos saíram, vale uma segunda
+    //    passada sem ajuste de polaridade — cobre foto com iluminação estranha
+    if(!cands.length && !(atual.serial && atual.mac)){
+      say("idle", `Analisando foto ${n}`, "Segunda passada…");
+      const t2 = await lerTexto(quadro(img, "normal"));
       const c2 = casar(t2);
       if(c2.length) cands = c2;
       texto += "\n" + t2;
@@ -547,6 +579,8 @@ async function analisar(img, file, n){
     const doTexto = extrair(texto);
     if(doTexto.mac)    registrar("mac", doTexto.mac.valor, doTexto.mac.peso, `foto ${n}`);
     if(doTexto.serial) registrar("serial", doTexto.serial.valor, doTexto.serial.peso, `foto ${n}`);
+
+    guardarSobras(codigos, texto);
 
     // o modelo entra com peso proporcional à força do casamento
     cands.slice(0,2).forEach((c,i) =>
@@ -562,6 +596,28 @@ async function analisar(img, file, n){
   }catch(e){
     say("err", `Foto ${n} não deu para ler`, String(e.message||e).slice(0,90));
   }
+}
+
+/* Recolhe o que apareceu na etiqueta e não virou MAC, serial nem modelo.
+   O identificador próprio é um terceiro código impresso em alguns equipamentos,
+   e como ainda não sei com que rótulo ele aparece, o caminho honesto é mostrar
+   os candidatos e deixar o operador apontar qual é. */
+function guardarSobras(codigos, texto){
+  const usados = new Set([atual.serial, atual.mac,
+    String(atual.serial||"").replace(/[:-]/g,""), String(atual.mac||"").replace(/[:-]/g,"")]);
+
+  const cand = [];
+  for(const c of codigos) cand.push(String(c).trim().toUpperCase());   // códigos de barras primeiro
+  for(const t of (texto.toUpperCase().match(/[A-Z0-9][A-Z0-9\-\/]{5,23}/g) || [])) cand.push(t);
+
+  for(let v of cand){
+    v = v.trim();
+    if(usados.has(v) || usados.has(v.replace(/[:-]/g,""))) continue;
+    if(/^[0-9]{1,4}$/.test(v)) continue;                    // número solto não é código
+    if(atual.produto && atual.produto.n.toUpperCase().includes(v)) continue;
+    if(!sobras.includes(v)) sobras.push(v);
+  }
+  sobras = sobras.slice(0, 8);
 }
 
 const contarPreenchidos = () => ["serial","mac","produto"].filter(k => atual[k]).length;
@@ -636,7 +692,20 @@ function carregarScript(src){ return new Promise((ok,no)=>{
    O modo "invertido" existe para etiqueta de fundo preto com texto branco, como
    as da Intelbras: o OCR só entende texto escuro sobre claro. */
 const LADO_OCR = 1800;
+const FAIXAS = 14;          // divisões horizontais para decidir a polaridade
 
+/* Prepara a imagem para o OCR.
+
+   O modo "auto" é o que resolve a etiqueta da Intelbras: ela tem uma faixa
+   preta com texto branco e o resto claro com texto escuro. Inverter a foto
+   inteira consertava uma metade e destruía a outra.
+
+   Aqui a imagem é dividida em faixas horizontais, cada faixa tem seu brilho
+   médio medido, e só as escuras são invertidas. No fim tudo vira texto escuro
+   sobre fundo claro, que é o único formato que o OCR entende bem.
+
+   O tamanho é limitado porque foto de celular tem 12 megapixels ou mais, e o
+   Tesseract fica pior e muito mais lento com imagem gigante. */
 function quadro(src, modo){
   const vw = src.videoWidth || src.width, vh = src.videoHeight || src.height;
   if(!vw || !vh) throw new Error("imagem sem tamanho");
@@ -649,12 +718,41 @@ function quadro(src, modo){
   x.drawImage(src, 0, 0, c.width, c.height);
 
   const img = x.getImageData(0,0,c.width,c.height), d = img.data;
-  const inv = modo === "invertido";
-  for(let i=0; i<d.length; i+=4){
-    let g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-    if(inv) g = 255 - g;
-    const v = g<105 ? 0 : (g>170 ? 255 : (g-105)*255/65);
-    d[i]=d[i+1]=d[i+2]=v;
+  const L = c.width * c.height;
+
+  // 1) tudo para cinza, guardando os valores para medir as faixas
+  const cinza = new Uint8ClampedArray(L);
+  for(let i=0, j=0; i<d.length; i+=4, j++)
+    cinza[j] = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+
+  // 2) polaridade por faixa
+  const alturaFaixa = Math.max(1, Math.floor(c.height / FAIXAS));
+  const inverter = new Uint8Array(FAIXAS + 1);
+
+  if(modo === "auto"){
+    for(let f=0; f<=FAIXAS; f++){
+      const y0 = f*alturaFaixa, y1 = Math.min(c.height, y0+alturaFaixa);
+      if(y0 >= y1) break;
+      let soma=0, n=0;
+      for(let y=y0; y<y1; y+=2)                     // amostra: metade das linhas basta
+        for(let px=0; px<c.width; px+=2){ soma += cinza[y*c.width+px]; n++; }
+      if(n && soma/n < 110) inverter[f] = 1;        // faixa escura
+    }
+  }else if(modo === "invertido"){
+    inverter.fill(1);
+  }
+
+  // 3) inverte onde precisa e estica o contraste
+  for(let y=0; y<c.height; y++){
+    const inv = inverter[Math.min(FAIXAS, Math.floor(y/alturaFaixa))];
+    for(let px=0; px<c.width; px++){
+      const j = y*c.width + px;
+      let g = cinza[j];
+      if(inv) g = 255 - g;
+      const v = g<105 ? 0 : (g>170 ? 255 : (g-105)*255/65);
+      const i = j*4;
+      d[i]=d[i+1]=d[i+2]=v;
+    }
   }
   x.putImageData(img,0,0);
   return c;
@@ -779,14 +877,33 @@ function ficha(){
   campo("cMac", "mac", atual.mac, "fotografe a etiqueta");
   campo("cModelo", "produto", atual.produto && atual.produto.n, "fotografe ou escolha");
 
+  const ci=$("cIdent"), precisa = ehIntelbras();
+  ci.classList.toggle("hide", !precisa);
+  if(precisa){
+    campo("cIdent", "identificador", atual.identificador, "toque no código certo ou digite");
+    if(!atual.identificador){
+      const alvo = $("cIdent").querySelector(".v");
+      alvo.innerHTML = sobras.length
+        ? `outros códigos lidos na etiqueta:<span class="opc">`
+          + sobras.map(v => `<button onclick="usarIdent('${v.replace(/'/g,"")}')">${v}</button>`).join("")
+          + `</span>`
+        : `<span class="vazio">fotografe a etiqueta ou toque em DIGITAR</span>`;
+    }
+  }
+
   const ct=$("cTag");
   ct.className="campo pronto"; ct.querySelector(".mark").textContent="✓";
   ct.querySelector(".v").className="v"; ct.querySelector(".v").textContent=TAG;
 
-  const conflito = ["serial","mac","produto"].some(k => atual.src[k] && atual.src[k].conflito);
+  const conflito = ["serial","mac","produto","identificador"]
+    .some(k => atual.src[k] && atual.src[k].conflito);
+  const faltaIdent = precisa && !atual.identificador;
+
   $("limparBtn").disabled = !(atual.serial || atual.mac || atual.produto || fotos.length);
-  $("sendBtn").disabled = !(atual.serial && atual.produto) || conflito;
-  $("sendBtn").textContent = conflito ? "Desempate antes de enviar"
+  $("sendBtn").disabled = !(atual.serial && atual.produto) || conflito || faltaIdent;
+  $("sendBtn").textContent =
+      conflito    ? "Desempate antes de enviar"
+    : faltaIdent  ? "Falta o identificador próprio"
     : (atual.serial && atual.produto && !atual.mac ? "Enviar sem MAC" : "Enviar para cadastro");
 }
 
@@ -840,7 +957,7 @@ async function enviar(){
       body: JSON.stringify({segredo:SEGREDO, item:{
         serial:atual.serial, mac:atual.mac||"", id_produto:atual.produto.id,
         produto:atual.produto.n, tag:TAG, tipo:"entrada",
-        operador:OPERADOR||"?"}})
+        identificador: atual.identificador || "", operador:OPERADOR||"?"}})
     });
     const res = await r.json();
     if(!res.ok) throw new Error(res.erro||"recusado pela planilha");
@@ -931,7 +1048,8 @@ function telaStatus(){
   $("telaCaptura").classList.add("hide"); $("rodapeCaptura").classList.add("hide");
   $("telaStatus").classList.remove("hide"); $("rodapeStatus").classList.remove("hide");
   $("resumo").innerHTML = atual.produto.n+"<br>"+atual.serial+(atual.mac?"  ·  "+atual.mac:"")
-    +"<br>"+TAG;
+    + (atual.identificador ? "<br>ident. " + atual.identificador : "")
+    + "<br>" + TAG;
   scrollTo(0,0);
 }
 function passo(id, estado, txt){
