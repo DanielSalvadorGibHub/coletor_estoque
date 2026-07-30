@@ -452,39 +452,43 @@ async function fotografar(){
   say("idle","Lendo a etiqueta","Segure firme por um instante.");
 
   try{
-    const nitido = quadro(video, false);   // para os códigos de barras
-    const forte  = quadro(video, true);    // com contraste, para o texto
-
-    const [codigos, texto] = await Promise.all([lerCodigos(nitido), lerTexto(forte)]);
-
-    const achado = {mac:null, serial:null};
-
-    // 1) códigos de barras primeiro — são exatos
+    // 1) códigos de barras: direto do vídeo, é o mais rápido e o mais exato
+    const codigos = await lerCodigos(video);
     for(const bruto of codigos){
       const {tipo, valor} = classify(bruto);
-      if(tipo==="mac" && !achado.mac) achado.mac = valor;
-      else if(tipo==="sn" && !achado.serial) achado.serial = valor;
+      if(tipo==="mac" && !atual.mac){ atual.mac=valor; atual.src.mac="codigo"; }
+      else if(tipo==="sn" && !atual.serial){ atual.serial=valor; atual.src.serial="codigo"; }
     }
-    for(const k of ["mac","serial"]){
-      if(achado[k]){ atual[k]=achado[k]; atual.src[k]="codigo"; }
+    ficha();
+
+    // 2) texto: primeira passada, etiqueta clara (a maioria)
+    let texto = await lerTexto(quadro(video, "normal"));
+    let cands = casar(texto);
+    let invertida = false;
+
+    // 3) só se não achou o modelo, tenta a versão invertida — é o caso das
+    //    etiquetas de fundo preto, como as da Intelbras. Fazer sempre as duas
+    //    passadas dobraria o tempo em toda leitura para ajudar numa minoria.
+    if(!cands.length){
+      b.textContent="Tentando etiqueta escura…";
+      const texto2 = await lerTexto(quadro(video, "invertido"));
+      const cands2 = casar(texto2);
+      if(cands2.length){ cands = cands2; invertida = true; }
+      texto = texto + "\n" + texto2;          // MAC e serial podem estar em qualquer uma
     }
 
-    // 2) OCR preenche só o que ficou em branco
+    // 4) OCR preenche o que os códigos não deram
     const doTexto = extrair(texto);
     if(!atual.mac && doTexto.mac){ atual.mac=doTexto.mac; atual.src.mac="foto"; }
     if(!atual.serial && doTexto.serial){ atual.serial=doTexto.serial; atual.src.serial="foto"; }
 
-    // 3) modelo, sempre do texto
-    if(!atual.produto){
-      const cands = casar(texto);
-      if(cands.length){
-        escolher(cands[0].id, "foto");
-        if(cands.length>1) mostrar(cands.slice(1), "Não é esse? Outros parecidos");
-      }
+    if(!atual.produto && cands.length){
+      escolher(cands[0].id, "foto");
+      if(cands.length>1) mostrar(cands.slice(1), "Não é esse? Outros parecidos");
     }
 
     ficha();
-    relatar(codigos.length, doTexto);
+    relatar(codigos.length, doTexto, invertida);
 
   }catch(e){
     say("err","Não deu para ler", String(e.message||e).slice(0,100));
@@ -494,7 +498,7 @@ async function fotografar(){
 }
 
 /** Conta o que entrou e o que falta, em vez de só dizer "pronto". */
-function relatar(qtdCodigos, doTexto){
+function relatar(qtdCodigos, doTexto, invertida){
   const falta = [];
   if(!atual.serial) falta.push("serial");
   if(!atual.mac) falta.push("MAC");
@@ -503,9 +507,10 @@ function relatar(qtdCodigos, doTexto){
   const daFoto = Object.keys(atual.src).filter(k=>atual.src[k]==="foto").length;
 
   if(!falta.length){
-    const msg = qtdCodigos
+    let msg = qtdCodigos
       ? `${qtdCodigos} código(s) de barras lido(s)` + (daFoto?` · ${daFoto} campo(s) da foto`:"")
       : "tudo lido do texto da etiqueta";
+    if(invertida) msg += " · etiqueta escura";
     say(daFoto ? "warn" : "ok", daFoto ? "Preenchido — confira o que está em âmbar" : "Tudo lido", msg);
     buzz(daFoto ? [60,40,60] : [40,60,40]);
   }else{
@@ -515,13 +520,15 @@ function relatar(qtdCodigos, doTexto){
   }
 }
 
-/** Detecta TODOS os códigos de barras da imagem. Etiqueta costuma ter dois ou três. */
-async function lerCodigos(canvas){
+/** Detecta TODOS os códigos de barras de uma vez. Recebe o vídeo direto: o
+    detector nativo aceita o elemento, então não precisa copiar o quadro para
+    uma tela — que era outra cópia de 33 megapixels à toa. */
+async function lerCodigos(video){
   if(!("BarcodeDetector" in window)) return [];   // iPhone cai aqui
   try{
     const det = new BarcodeDetector({formats:
       ["code_128","code_39","code_93","qr_code","data_matrix","itf","codabar","ean_13"]});
-    const achados = await det.detect(canvas);
+    const achados = await det.detect(video);
     return achados.map(a=>a.rawValue).filter(Boolean);
   }catch(e){ return []; }
 }
@@ -542,19 +549,33 @@ function carregarScript(src){ return new Promise((ok,no)=>{
   const s=document.createElement("script"); s.src=src; s.onload=ok;
   s.onerror=()=>no(new Error("sem internet para baixar o leitor de texto")); document.head.appendChild(s); }); }
 
-/** Amplia a imagem. Com contraste para o texto; limpa para os códigos de barras. */
-function quadro(video, contraste){
-  const vw=video.videoWidth, vh=video.videoHeight, esc=2;
-  const c=document.createElement("canvas"); c.width=vw*esc; c.height=vh*esc;
-  const x=c.getContext("2d");
-  x.imageSmoothingQuality="high";
-  x.drawImage(video, 0,0, c.width, c.height);
-  if(!contraste) return c;
+/* Prepara a imagem para o OCR.
+   O tamanho é limitado de propósito: com a câmera em 4K, ampliar o quadro dava
+   uma tela de 33 milhões de pixels e travava o aparelho. Além disso o Tesseract
+   não fica melhor com imagem gigante — fica pior e muito mais lento. Cerca de
+   1800px no lado maior é o ponto onde ele lê bem e rápido.
 
-  const img=x.getImageData(0,0,c.width,c.height), d=img.data;
-  for(let i=0;i<d.length;i+=4){
-    const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-    const v=g<105?0:(g>170?255:(g-105)*255/65);
+   modo "invertido" existe para as etiquetas de fundo preto com texto branco,
+   como as da Intelbras: o OCR só entende texto escuro sobre claro. */
+const LADO_OCR = 1800;
+
+function quadro(video, modo){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if(!vw || !vh) throw new Error("câmera sem imagem");
+
+  const esc = Math.min(2, LADO_OCR / Math.max(vw, vh));   // reduz o 4K, amplia o pequeno
+  const c = document.createElement("canvas");
+  c.width = Math.round(vw*esc); c.height = Math.round(vh*esc);
+  const x = c.getContext("2d", {willReadFrequently:true});
+  x.imageSmoothingQuality = "high";
+  x.drawImage(video, 0, 0, c.width, c.height);
+
+  const img = x.getImageData(0,0,c.width,c.height), d = img.data;
+  const inv = modo === "invertido";
+  for(let i=0; i<d.length; i+=4){
+    let g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    if(inv) g = 255 - g;                       // branco-no-preto vira preto-no-branco
+    const v = g<105 ? 0 : (g>170 ? 255 : (g-105)*255/65);
     d[i]=d[i+1]=d[i+2]=v;
   }
   x.putImageData(img,0,0);
