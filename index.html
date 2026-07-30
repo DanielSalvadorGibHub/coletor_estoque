@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1416">
+<title>Coletor de Estoque</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Coletor">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+  :root{
+    --bg:#0B1416; --panel:#12211F; --panel-2:#16292A; --line:#1F3A3B;
+    --ink:#E6F2F0; --ink-dim:#7E9C9B;
+    --ok:#3FD8A4; --warn:#F5B23D; --err:#FF5C5C; --accent:#25C2C8;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans)}
+  body{max-width:640px;margin:0 auto}
+
+  header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+    padding:10px 14px 8px;display:flex;align-items:center;gap:10px}
+  .brand{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);font-weight:700}
+  .gear{background:none;border:none;color:var(--ink-dim);font-size:17px;cursor:pointer;padding:2px 6px}
+  .tally{margin-left:auto;font-family:var(--mono);font-size:22px;font-weight:700;line-height:1;color:var(--ok)}
+  .tally small{display:block;font-size:9px;letter-spacing:.14em;color:var(--ink-dim);
+    font-family:var(--sans);text-align:right;margin-top:3px}
+  .link{height:3px;background:var(--line)}
+  .instalar{margin:0;padding:12px 14px;background:var(--panel-2);
+    border-bottom:1px solid var(--accent);font-size:13px;line-height:1.5;
+    display:flex;gap:10px;align-items:center}
+  .instalar span{flex:1}
+  .instalar b{color:var(--accent)}
+  .instalar button{background:var(--accent);color:#041516;border:none;padding:9px 14px;
+    border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;flex:none}
+  .instalar button.x{background:none;color:var(--ink-dim);padding:9px 4px;font-size:17px}
+  .aviso{margin:0;padding:13px 14px;background:#2C1517;border-bottom:1px solid var(--err);
+    font-size:13px;line-height:1.5;color:#FFD9DA}
+  .aviso b{color:var(--err);display:block;font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;margin-bottom:5px}
+  .aviso code{font-family:var(--mono);font-size:12px;background:rgba(0,0,0,.35);
+    padding:1px 5px;border-radius:4px;word-break:break-all}
+  .link.on{background:var(--ok)} .link.off{background:var(--err)} .link.busy{background:var(--warn)}
+
+  .wrap{padding:14px 14px 120px}
+  .hide{display:none!important}
+
+  label.fld{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-dim);font-weight:700;margin:0 0 6px}
+  input[type=text],input[type=search],input[type=url],input[type=password]{width:100%;padding:13px 12px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--ink);
+    font-size:16px;font-family:var(--mono)}
+  input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+
+  .scanbox{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#000;margin-bottom:10px}
+  #reader{width:100%} #reader video{display:block;width:100%!important}
+
+  .btn{width:100%;padding:16px;border-radius:12px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+  .btn-main{background:var(--accent);color:#041516}
+  .btn-ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-lg{padding:20px;font-size:16px}
+
+  /* ficha do aparelho: as três coisas que precisam estar certas antes de enviar */
+  .ficha{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:12px 0;overflow:hidden}
+  .campo{display:flex;align-items:center;gap:11px;padding:13px 12px;border-bottom:1px solid var(--line)}
+  .campo:last-child{border-bottom:none}
+  .campo .k{font-size:10px;letter-spacing:.1em;color:var(--ink-dim);width:52px;flex:none;font-weight:700}
+  .campo .v{font-family:var(--mono);font-size:15px;flex:1;word-break:break-word;line-height:1.35}
+  .campo .v.vazio{color:#3E5B5C;font-family:var(--sans);font-size:13px}
+  .campo.pronto{background:#0F2A22}
+  .campo .mark{width:16px;flex:none;text-align:center;font-size:13px;color:var(--ok)}
+  .campo .edit{background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;
+    cursor:pointer;padding:4px 2px;flex:none;letter-spacing:.06em}
+  .campo .v small{display:block;font-family:var(--sans);font-size:10px;color:var(--ink-dim);
+    letter-spacing:.06em;margin-top:3px;text-transform:uppercase}
+  .campo.duvida{background:#2C2312} .campo.duvida .mark{color:var(--warn)}
+  .tags{display:grid;gap:7px}
+  .tags button{padding:14px 12px;border:1px solid var(--line);background:var(--panel);
+    border-radius:10px;color:var(--ink-dim);font-size:13px;font-weight:600;text-align:left;
+    cursor:pointer;font-family:var(--sans)}
+  .tags button[aria-pressed="true"]{background:var(--panel-2);border-color:var(--accent);
+    color:var(--ink)}
+  .tags button[aria-pressed="true"]::before{content:"● ";color:var(--accent)}
+  .tags button[aria-pressed="false"]::before{content:"○ ";color:var(--line)}
+
+  .status{margin:12px 0;border-radius:12px;padding:15px;border-left:5px solid var(--line);
+    background:var(--panel);min-height:72px;display:flex;flex-direction:column;justify-content:center}
+  .status .t{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--ink-dim)}
+  .status .m{font-family:var(--mono);font-size:14px;margin-top:6px;word-break:break-word;line-height:1.4}
+  .status.ok{border-left-color:var(--ok);background:#0F2A22} .status.ok .t{color:var(--ok)}
+  .status.warn{border-left-color:var(--warn);background:#2C2312} .status.warn .t{color:var(--warn)}
+  .status.err{border-left-color:var(--err);background:#2C1517} .status.err .t{color:var(--err)}
+
+  #results{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;
+    background:var(--panel);margin-top:8px}
+  #results button{display:block;width:100%;text-align:left;padding:12px;background:none;border:none;
+    border-bottom:1px solid var(--line);color:var(--ink);font-size:13px;line-height:1.3;cursor:pointer}
+  #results button:hover,#results button:focus{background:var(--panel-2);outline:none}
+  #results .pid{font-family:var(--mono);color:var(--accent);font-size:11px;margin-right:8px}
+  #results .sc{float:right;font-family:var(--mono);font-size:10px;color:var(--ink-dim)}
+
+  /* ---- tela de acompanhamento ---- */
+  .etapas{margin:22px 0 26px;padding-left:6px}
+  .etapa{display:flex;gap:14px;align-items:flex-start;position:relative;padding-bottom:24px}
+  .etapa:last-child{padding-bottom:0}
+  .etapa::before{content:"";position:absolute;left:9px;top:22px;bottom:0;width:2px;background:var(--line)}
+  .etapa:last-child::before{display:none}
+  .etapa.feito::before{background:var(--ok)}
+  .bolha{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);flex:none;
+    background:var(--bg);z-index:1;display:flex;align-items:center;justify-content:center;
+    font-size:11px;color:var(--bg);font-weight:700}
+  .etapa.feito .bolha{background:var(--ok);border-color:var(--ok)}
+  .etapa.agora .bolha{border-color:var(--accent);animation:pulso 1.1s ease-in-out infinite}
+  .etapa.falhou .bolha{background:var(--err);border-color:var(--err)}
+  @keyframes pulso{0%,100%{box-shadow:0 0 0 0 rgba(37,194,200,.5)}50%{box-shadow:0 0 0 8px rgba(37,194,200,0)}}
+  .etapa .txt{padding-top:1px}
+  .etapa .tt{font-size:14px;font-weight:600;color:var(--ink-dim)}
+  .etapa.feito .tt,.etapa.agora .tt{color:var(--ink)}
+  .etapa .ss{font-size:12px;color:var(--ink-dim);margin-top:3px;line-height:1.45}
+
+  .veredito{border-radius:14px;padding:22px 18px;text-align:center;margin-bottom:18px}
+  .veredito.ok{background:#0F2A22;border:1px solid var(--ok)}
+  .veredito.err{background:#2C1517;border:1px solid var(--err)}
+  .veredito.warn{background:#2C2312;border:1px solid var(--warn)}
+  .veredito .icone{font-size:34px;line-height:1}
+  .veredito h2{margin:10px 0 6px;font-size:18px}
+  .veredito p{margin:0;font-size:13px;color:var(--ink-dim);line-height:1.5;word-break:break-word}
+  .resumo{font-family:var(--mono);font-size:12px;color:var(--ink-dim);text-align:center;
+    line-height:1.7;margin-bottom:18px}
+
+  dialog{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:14px;
+    padding:18px;max-width:440px;width:92%}
+  dialog::backdrop{background:rgba(0,0,0,.72)}
+  dialog h2{margin:0 0 4px;font-size:15px}
+  dialog p{color:var(--ink-dim);font-size:12px;line-height:1.55;margin:0 0 16px}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:110px;background:var(--ok);color:#04241B;
+    padding:11px 20px;border-radius:999px;font-size:13px;font-weight:700;z-index:60;opacity:0;
+    transition:opacity .2s;pointer-events:none;max-width:88%;text-align:center}
+  .toast.on{opacity:1} .toast.bad{background:var(--err);color:#2A0709}
+  footer{position:fixed;bottom:0;left:0;right:0;z-index:20;background:var(--bg);border-top:1px solid var(--line);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
+  .hint{font-size:12px;color:var(--ink-dim);line-height:1.55;margin:10px 2px 0}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Coletor <span id="quem" style="color:var(--accent)"></span></div>
+  <button class="gear" onclick="cfgOpen()" aria-label="Configurar envio">⚙</button>
+  <div class="tally"><span id="tally">0</span><small>cadastrados hoje</small></div>
+</header>
+<div class="link" id="link"></div>
+<div id="aviso" class="aviso hide"></div>
+<div id="instalar" class="instalar hide"></div>
+
+<!-- ============================ TELA 1: CAPTURA ============================ -->
+<div class="wrap" id="telaCaptura">
+
+  <div class="scanbox"><div id="reader"></div></div>
+  <button class="btn btn-main" id="camBtn" onclick="toggleCam()">Ligar câmera</button>
+  <div class="btn-row">
+    <button class="btn btn-ghost" id="ocrBtn" onclick="lerModelo()">Ler modelo da etiqueta</button>
+    <button class="btn btn-ghost" onclick="manual()">Digitar código</button>
+  </div>
+
+  <div class="ficha">
+    <div class="campo" id="cSerial">
+      <span class="mark"></span><span class="k">Serial</span>
+      <span class="v vazio">bipe o código de barras</span>
+    </div>
+    <div class="campo" id="cMac">
+      <span class="mark"></span><span class="k">MAC</span>
+      <span class="v vazio">bipe o segundo código</span>
+    </div>
+    <div class="campo" id="cModelo">
+      <span class="mark"></span><span class="k">Modelo</span>
+      <span class="v vazio">leia a etiqueta ou escolha</span>
+      <button class="edit" onclick="abrirBusca()">TROCAR</button>
+    </div>
+    <div class="campo" id="cTag">
+      <span class="mark"></span><span class="k">Tag</span>
+      <span class="v vazio">escolha abaixo</span>
+    </div>
+  </div>
+
+  <div id="buscaBox" class="hide">
+    <label class="fld" for="prodSearch">Procurar modelo na lista de produtos</label>
+    <input type="search" id="prodSearch" placeholder="8145, f670, eap610…" oninput="search(this.value)" autocomplete="off">
+    <div id="results"></div>
+  </div>
+
+  <div class="status" id="status">
+    <div class="t">Aguardando</div>
+    <div class="m">Ligue a câmera e bipe a etiqueta.</div>
+  </div>
+
+  <div style="margin-top:2px">
+    <label class="fld">Tag deste equipamento</label>
+    <div class="tags" id="tags"></div>
+  </div>
+
+  <p class="hint">Setor: <b style="color:var(--ink)">CORREÇÃO DE COMODATO</b> —
+     o mesmo para todos os equipamentos, não é editável de propósito.</p>
+  <p class="hint" id="persistHint"></p>
+</div>
+
+<footer id="rodapeCaptura">
+  <button class="btn btn-main btn-lg" id="sendBtn" onclick="enviar()" disabled>Enviar para cadastro</button>
+</footer>
+
+<!-- ========================== TELA 2: ACOMPANHAMENTO ======================== -->
+<div class="wrap hide" id="telaStatus">
+  <div id="vereditoBox"></div>
+  <div class="resumo" id="resumo"></div>
+
+  <div class="etapas">
+    <div class="etapa" id="e1"><div class="bolha">✓</div><div class="txt">
+      <div class="tt">Enviado do celular</div><div class="ss" id="s1">…</div></div></div>
+    <div class="etapa" id="e2"><div class="bolha">✓</div><div class="txt">
+      <div class="tt">Na fila do computador</div><div class="ss" id="s2">…</div></div></div>
+    <div class="etapa" id="e3"><div class="bolha">✓</div><div class="txt">
+      <div class="tt">Conferindo serial e MAC no HubSoft</div><div class="ss" id="s3">…</div></div></div>
+    <div class="etapa" id="e4"><div class="bolha">✓</div><div class="txt">
+      <div class="tt">Cadastrado</div><div class="ss" id="s4">…</div></div></div>
+  </div>
+</div>
+
+<footer class="hide" id="rodapeStatus">
+  <button class="btn btn-main btn-lg" id="nextBtn" onclick="proximo()" disabled>Aguarde…</button>
+  <div class="btn-row hide" id="linhaErro">
+    <button class="btn btn-ghost" onclick="reenviar()">Tentar de novo</button>
+    <button class="btn btn-ghost" onclick="proximo()">Próximo aparelho</button>
+  </div>
+</footer>
+
+<dialog id="cfg">
+  <h2>Envio para a planilha</h2>
+  <p>URL do App da Web gerada ao publicar o Apps Script e o mesmo segredo que está
+     no código dele. Fica salvo só neste aparelho.</p>
+  <div style="margin-bottom:14px">
+    <label class="fld" for="cfgUrl">URL do Apps Script</label>
+    <input type="url" id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec">
+  </div>
+  <div style="margin-bottom:14px">
+    <label class="fld" for="cfgKey">Segredo</label>
+    <input type="password" id="cfgKey" placeholder="mesmo valor da constante SEGREDO">
+  </div>
+  <div style="margin-bottom:14px">
+    <label class="fld" for="cfgQuem">Quem está usando este aparelho</label>
+    <input type="text" id="cfgQuem" placeholder="primeiro nome">
+  </div>
+  <div class="btn-row" style="margin-top:0">
+    <button class="btn btn-ghost" onclick="cfg.close()">Cancelar</button>
+    <button class="btn btn-main" onclick="cfgSave()">Salvar</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const PRODUTOS = [{"id": 40, "n": "ACCESS POINT TP-LINK EAP610 INDOOR/OUTDOOR - AX1800"}, {"id": 381, "n": "ACCESS ROUTER HUAWEI EKIT AR180PRO"}, {"id": 380, "n": "ACCESS ROUTER HUAWEI EKIT AR280"}, {"id": 923, "n": "ADAPTADOR DE REDE USB 3.0 TIPO C - UE300C"}, {"id": 431, "n": "ADAPTADOR ETHERNET TP-LINK Ue300/Ue306 USB 3.0 LAN RJ GIGABIT"}, {"id": 368, "n": "BATERIA ESTACIONÁRIA 12MN1000 MOURA (60AH)"}, {"id": 1013, "n": "BATERIA ESTACIONÁRIA 12MN2000 MOURA (116AH)"}, {"id": 493, "n": "CAMERA CAMERA DOME VIP 3230 D"}, {"id": 486, "n": "CAMERA DOME VIP 1230 D G2/G4 V2"}, {"id": 487, "n": "CAMERA IP BULLET VIP 1230 B G2/G4"}, {"id": 492, "n": "CAMERA VIP 3430 D/B"}, {"id": 39, "n": "CHIP SIMCARD - DIRECT"}, {"id": 475, "n": "CIANET ONT (ONU GW24AC)"}, {"id": 928, "n": "CIANET ONU EB01 V2"}, {"id": 869, "n": "CIANET ONU GB01 V2"}, {"id": 217, "n": "CLIVADOR FC-20"}, {"id": 361, "n": "DATACOM DM986 - 416 AX30 HW2"}, {"id": 973, "n": "F. M SFP+ 10G 10KM LC BIDI DDM TX1270-RX1330NM S+23LCLC10D"}, {"id": 972, "n": "F. M SFP+ 10G 10KM LC BIDI DDM TX1330-RX1270NM S+32LCLC10D"}, {"id": 454, "n": "F. M SFP+ 10G 20KM LC BIDI DDM TX1270-RX1330NM WDM12-R20"}, {"id": 453, "n": "F. M SFP+ 10G 20KM LC BIDI DDM TX1330-RX1270NM WDM13-R20"}, {"id": 932, "n": "F.M SFP 1.25G 80KM BIDI LC DDM TX1550-RX1490NM 5424L-R80D"}, {"id": 968, "n": "F.M SFP+ 10G 20KM BIDI DDM 1270-1330NM BX20-U"}, {"id": 961, "n": "FIBERHOME AN5506-01-B"}, {"id": 328, "n": "FIBERHOME GPON AN5506-01-A (MATRIZ)"}, {"id": 367, "n": "FIBERHOME GPON AN5506-01-A MINI"}, {"id": 518, "n": "FIBERHOME GPON AN5506-02-B"}, {"id": 989, "n": "FIBERHOME GPON AN5506-02-FG"}, {"id": 981, "n": "FIBERHOME HG6821M"}, {"id": 902, "n": "FIBERHOME HG6821M 04P"}, {"id": 420, "n": "FIBERHOME ONT GPON AN5506-04-FG"}, {"id": 864, "n": "FIBERLINK PARKS 1100"}, {"id": 1008, "n": "FONTE AC S6730/5731/5732"}, {"id": 860, "n": "FONTE ALIMENTAÇÃO DATACOM PSU 125W DC -48V - (PSU 125 DC)"}, {"id": 966, "n": "FONTE DC F1A - 1000W"}, {"id": 868, "n": "FONTE DC S6730/5731/5732"}, {"id": 941, "n": "FONTE DC SWITCH 6720"}, {"id": 69, "n": "FONTE OLT VERTIV R48-2000e3 (EMERSON)"}, {"id": 1007, "n": "G/EPON ONU HG3221D-4G VSOL"}, {"id": 1006, "n": "G/EPON ONU WK-3802AW"}, {"id": 933, "n": "GBIC ELETRICA SFP 1000BASE 100M RJ45"}, {"id": 888, "n": "GPON ONT FD600-511G-HZ650"}, {"id": 884, "n": "GPON ONU FD511HZ"}, {"id": 882, "n": "GPON ONU FD604GW-DG-Z710"}, {"id": 488, "n": "GRAVADOR DIGITAL DE IMAGEM NVD 1408P"}, {"id": 994, "n": "GRAVADOR DIGITAL DE VIDEO INVD 3016-P C/HD - INTELBRAS"}, {"id": 68, "n": "HD WD PURPLE 2TB - WD22PURZ - SATA 6Gb/s"}, {"id": 70, "n": "HD WD PURPLE 4TB - WD40PURZ - SATA 6Gb/s"}, {"id": 71, "n": "HEADSET INTELBRAS WHS 60 DUO USB"}, {"id": 469, "n": "HUAWEI GPON ECHOLIFE EG8141A5"}, {"id": 371, "n": "HUAWEI GPON ONU/ONT ECHOLIFE HS8546V5"}, {"id": 905, "n": "HUAWEI SWITCH 48P S6720-54C-EI-48S"}, {"id": 309, "n": "IDENTIFICADOR DE CABOS - FIBRA ATIVA - KFI-40V KOMSHINE (SERIAL)"}, {"id": 446, "n": "IDENTIFICADOR DE CABOS - FIBRA ATIVA - ORIENTEK TFI-40"}, {"id": 494, "n": "IMPRESSORA HP LASERJET MFP M28W"}, {"id": 1000, "n": "INVERSOR (DIVERSOS)"}, {"id": 998, "n": "MACBOOK APPLE A3240 M4 16GB 256GB"}, {"id": 999, "n": "MACBOOK APPLE A3449 M5 16GB 1TB"}, {"id": 896, "n": "MACBOOK MODELO A2337"}, {"id": 500, "n": "MAQUINA DE FUSAO O-TECH H0EA3000"}, {"id": 451, "n": "MAQUINA DE FUSAO ORIENTEK T40"}, {"id": 445, "n": "MAQUINA DE FUSAO ORIENTEK T45"}, {"id": 416, "n": "MAQUINA DE FUSÃO FUJIKURA 26S"}, {"id": 462, "n": "MAQUINA DE FUSÃO FUJIKURA 36S"}, {"id": 421, "n": "MAQUINA DE FUSÃO FUJIKURA 70S"}, {"id": 447, "n": "MAQUINA DE FUSÃO KOMSHINE FX39 (EKTECH)"}, {"id": 455, "n": "MAQUINA DE FUSÃO OPTICAL FIBER FUSION SPLICER AI9"}, {"id": 471, "n": "MAQUINA DE FUSÃO ORIENTEK T37"}, {"id": 443, "n": "MAQUINA DE FUSÃO ORIENTEK T49"}, {"id": 457, "n": "MAQUINA DE FUSÃO SUMITOMO T-400S"}, {"id": 1012, "n": "MERCUSYS HALO H30G"}, {"id": 946, "n": "MICROCOMPUTADOR DELL PRO QCM1250"}, {"id": 495, "n": "MICROCOMPUTADOR NTC PC HOME - I5 8301 e 801 GA10G (I5-10400/8GB/SSD240GB)"}, {"id": 483, "n": "MICROCOMPUTADOR NTC PC I3 4115"}, {"id": 931, "n": "MIKROTIK CLOUD CORE ROUTER CCR1009-7G-1C-1S+PC"}, {"id": 866, "n": "MIKROTIK CLOUD CORE ROUTER CCR1036-8G-2S+ EM"}, {"id": 992, "n": "MIKROTIK CLOUD CORE ROUTER CCR2116-12G-4S+"}, {"id": 980, "n": "MIKROTIK CRS328-24P-4S+RM"}, {"id": 887, "n": "MIKROTIK CRS328-4C-20S-4S+RM"}, {"id": 501, "n": "MIKROTIK RB951G-2HnD"}, {"id": 993, "n": "MIKROTIK ROUTERBOARD CCR1016-12G"}, {"id": 910, "n": "MIKROTIK ROUTERBOARD RB 2011UIAS-RM"}, {"id": 911, "n": "MIKROTIK ROUTERBOARD RB 3011UIAS-RM"}, {"id": 478, "n": "MIKROTIK ROUTERBOARD RB 750GL"}, {"id": 480, "n": "MIKROTIK ROUTERBOARD RB 750GR3"}, {"id": 388, "n": "MIKROTIK ROUTERBOARD RB 750R2 HEX LITE"}, {"id": 479, "n": "MIKROTIK ROUTERBOARD RB 750UPR2 HEX POE LITE"}, {"id": 516, "n": "MIKROTIK ROUTERBOARD RB2011iLS-IN"}, {"id": 496, "n": "MONITOR AOC 21,5\" E2270SWHEN"}, {"id": 893, "n": "MONITOR DELL 22\" SE2225HMo"}, {"id": 1018, "n": "MONITOR DELL 24' SE2426H"}, {"id": 384, "n": "MONITOR LG 19'5 LED 20MK400H(HDMI/VGA/VESA/1366X768)"}, {"id": 442, "n": "MOUSE PAD / BASE PARA MOUSE"}, {"id": 358, "n": "MULTILASER ROTEADOR 300 MBPS RE163 / RE163V"}, {"id": 459, "n": "MULTILAZER RE047 150 MBPS"}, {"id": 435, "n": "NOKIA G-240W-C"}, {"id": 400, "n": "NOKIA WIFI BEACON HA-020W-B"}, {"id": 861, "n": "NOTEBOOK ACER - SF314-59-750QC - MODEL N19C4 - I7-8GB/256SSD/14\""}, {"id": 917, "n": "NOTEBOOK ACER ASPIRE 5 15 i7 12ªGeração"}, {"id": 497, "n": "NOTEBOOK ACER ASPIRE E1 - MODEL Z5WE3"}, {"id": 489, "n": "NOTEBOOK ACER ASPIRE GO 15 - MODELO N23C3 i7 16GB/512GB"}, {"id": 955, "n": "NOTEBOOK DELL (DIVERSOS)"}, {"id": 895, "n": "NOTEBOOK DELL 15 DC15250"}, {"id": 894, "n": "NOTEBOOK DELL ALIENWARE AURORA 16 AC16250"}, {"id": 979, "n": "NOTEBOOK DELL VOSTRO P89G"}, {"id": 1010, "n": "NOTEBOOK HP (DIVERSOS)"}, {"id": 490, "n": "NOTEBOOK HP LAPTOP 14-EM0085CL"}, {"id": 1005, "n": "NOTEBOOK LENOVO (DIVERSOS)"}, {"id": 498, "n": "NOTEBOOK LENOVO IDEAPAD 3 15ITL6"}, {"id": 499, "n": "NOTEBOOK LENOVO THINKPAD E14 GEN 2 20TB"}, {"id": 891, "n": "OLT DATACOM DM4615 16GPON + 4GT + 4XS"}, {"id": 452, "n": "OLT FIBERHOME AN5516-01 FBH 11U 10G 2*HU2A+2*HSWA SEM BOARD 10 VENT"}, {"id": 935, "n": "OLT FIBERHOME AN5516-04 SEM BOARD"}, {"id": 952, "n": "OLT FIBERHOME AN5516-06 FBH 10G 1*HU2A+2*HSWA SEM BOARD"}, {"id": 991, "n": "OLT FIBERHOME AN5516-06B FBH 10G 2*HU1A+2*HSWA SEM BOARD"}, {"id": 853, "n": "OLT FIBERHOME AN6000-15 FBH 11U 10G 1*HSCA 2*PIBA SEM BOARD"}, {"id": 1023, "n": "OLT GEPON CIANET E8PS"}, {"id": 528, "n": "ONT 142N W"}, {"id": 510, "n": "ONT CHINA G-140W-ME"}, {"id": 472, "n": "ONT DATACOM DM985-424 HW3"}, {"id": 434, "n": "ONT DATACOM DM986-414"}, {"id": 437, "n": "ONT FAST WIRELESS XPON FW323DAC WIFI"}, {"id": 150, "n": "ONT FIBERHOME HG6143D"}, {"id": 151, "n": "ONT FIBERHOME HG6245D"}, {"id": 152, "n": "ONT FIBERHOME/INTELBRAS AC1200 HG6145D2"}, {"id": 149, "n": "ONT FIBERHOME/INTELBRAS HG6145F3 AX3000"}, {"id": 1027, "n": "ONT FURUKAWA FBS 423-41W/AC"}, {"id": 862, "n": "ONT FURUKAWA FBS LD1102W"}, {"id": 970, "n": "ONT G/EPON 02GW"}, {"id": 350, "n": "ONT GPON WIFI AC - CHINA - G-140W-MF 1POT+4GE 2.4/5GHZ 2USB"}, {"id": 1020, "n": "ONT HUAWEI ECHOLIFE EG8120L"}, {"id": 364, "n": "ONT HUAWEI ECHOLIFE EG8145V5 / EG8145V5 - V2"}, {"id": 957, "n": "ONT HUAWEI ECHOLIFE HG8120H"}, {"id": 394, "n": "ONT HUAWEI ECHOLIFE HG8145V5 / HG8145V5-V2"}, {"id": 921, "n": "ONT HUAWEI ECHOLIFE HG8245H"}, {"id": 995, "n": "ONT HUAWEI ECHOLIFE HG8245Q2"}, {"id": 967, "n": "ONT HUAWEI ECHOLIFE HG8245W5-6T"}, {"id": 373, "n": "ONT HUAWEI ECHOLIFE HG8546M"}, {"id": 971, "n": "ONT HUAWEI ECHOLIFE HS8545M5"}, {"id": 386, "n": "ONT HUAWEI OPTIXSTAR EG8145X6 / EG8145X6-10 GPON"}, {"id": 873, "n": "ONT HUAWEI OPTIXSTAR HG8145X6"}, {"id": 922, "n": "ONT HUAWEI OPTIXSTAR HG8145X6-10-V2"}, {"id": 951, "n": "ONT HUAWIE OPTIXSTAR EG8041X6-10"}, {"id": 86, "n": "ONT INTELBRAS WIFIBER AX1800 (WIFI 6)"}, {"id": 87, "n": "ONT INTELBRAS WIFIBER AX1800V (WIFI 6) - C/ PORTA FXS + USB"}, {"id": 88, "n": "ONT INTELBRAS WIFIBER AX3000V 4LAN 2FXS 1USB"}, {"id": 1022, "n": "ONT MAXPRINT MAXFIBER 1200G2 FXS"}, {"id": 391, "n": "ONT MITRASTAR GPT-2741 GNAC-N2"}, {"id": 977, "n": "ONT MULTILASER ZTE MODELO F660 V7.1"}, {"id": 362, "n": "ONT MULTILASER ZTE MODELO ZXHN F601"}, {"id": 372, "n": "ONT MULTILASER ZTE MODELO ZXHN F670L"}, {"id": 360, "n": "ONT NOKIA G-0425G-C"}, {"id": 349, "n": "ONT NOKIA G-140W-H"}, {"id": 348, "n": "ONT NOKIA G-1425G-A"}, {"id": 333, "n": "ONT NOKIA G-1425G-B"}, {"id": 369, "n": "ONT NOKIA G-240W-G"}, {"id": 366, "n": "ONT NOKIA G-2425G-A"}, {"id": 950, "n": "ONT RAISECOM HT803G-WS2"}, {"id": 982, "n": "ONT SHORELINE XPON SH1020W"}, {"id": 363, "n": "ONT STAVIX / MP - G421R"}, {"id": 987, "n": "ONT STAVIX MP - G421RQ"}, {"id": 919, "n": "ONT STAVIX MP-X421RQ-F"}, {"id": 876, "n": "ONT SUMEC SM164242"}, {"id": 332, "n": "ONT TENDA AC1200 GPON ONT HG9"}, {"id": 334, "n": "ONT TP-LINK XC220-G3 AC1200 GPON ROUTER"}, {"id": 325, "n": "ONT TP-LINK XC220-G3v AC1200 VoIP GPON ROUTER C FXS"}, {"id": 89, "n": "ONT TP-LINK XX230v AX1800 DUAL BAND WIFI6 GPON ROUTER"}, {"id": 90, "n": "ONT TP-LINK XX530v AX3000 DUAL BAND WIFI6 GPON ROUTER 1X FXS 1X USB"}, {"id": 91, "n": "ONT TP-LINK XX530v AX3000 XPON DUAL BAND WIFI6"}, {"id": 1004, "n": "ONT TP-LINK XX535 AX3000 DUAL-BAND WI-FI 6 XPON"}, {"id": 986, "n": "ONT UNEE UN1200X-AC"}, {"id": 444, "n": "ONT VSOL G/EPON HG323DAC"}, {"id": 392, "n": "ONT VSOL G/EPON V2802DAC - 2GE+2WIFI"}, {"id": 376, "n": "ONT WIFI AC - NOKIA - G-140W-C 1POT+4GE 2.4/5GHZ 2USB"}, {"id": 92, "n": "ONT WIFIBER 121 AC INTELBRAS (MATRIZ)"}, {"id": 916, "n": "ONT ZTE GIGA MODELO ZXHN F6600P"}, {"id": 401, "n": "ONT ZTE MODELO ZXHN F612"}, {"id": 351, "n": "ONT ZTE ZXHN F660"}, {"id": 374, "n": "ONT ZTE ZXHN F673AV9"}, {"id": 1029, "n": "ONT ZTE ZXHNF6201B"}, {"id": 93, "n": "ONU 110 - INTELBRAS - GPON (MATRIZ)"}, {"id": 94, "n": "ONU 110 B - INTELBRAS - GPON (MATRIZ)"}, {"id": 95, "n": "ONU 110 G / INTELBRAS E FURUKAWA"}, {"id": 953, "n": "ONU 1GE G/EPON HYBRID"}, {"id": 379, "n": "ONU D-NET DN-GPON-1010-MX"}, {"id": 365, "n": "ONU DATACOM DM986-100"}, {"id": 508, "n": "ONU DIGISTAR GRG-21000"}, {"id": 370, "n": "ONU DIGISTAR GRG-31000"}, {"id": 393, "n": "ONU FAST WIRELESS XPON FW2801SG"}, {"id": 997, "n": "ONU FIBERHOME GPON AN5506-04"}, {"id": 337, "n": "ONU FURUKAWA MODELO 630-10B"}, {"id": 339, "n": "ONU FURUKAWA MODELO 640-10B"}, {"id": 327, "n": "ONU FURUKAWA MODELO LD-1102W"}, {"id": 347, "n": "ONU FURUKAWA MODELO LD420-10R GPON"}, {"id": 468, "n": "ONU G/EPON CONNECT"}, {"id": 343, "n": "ONU G/EPON xPON AZUL (MATRIZ)"}, {"id": 485, "n": "ONU GL-G8010U-FZ"}, {"id": 907, "n": "ONU GPON GP-125"}, {"id": 949, "n": "ONU GPON HUAWEI F6610M"}, {"id": 467, "n": "ONU GPON MULTILASER RE709"}, {"id": 389, "n": "ONU GPON TX-6610"}, {"id": 387, "n": "ONU GPON XZ000-G3"}, {"id": 390, "n": "ONU HUAWEI ECHOLIFE HG8010H"}, {"id": 383, "n": "ONU HUAWEI ECHOLIFE HG8310M"}, {"id": 357, "n": "ONU HUAWEI EG8010H"}, {"id": 335, "n": "ONU HUAWEI GPON HG8110H"}, {"id": 1016, "n": "ONU MULTILASER RE880"}, {"id": 96, "n": "ONU R1 (MATRIZ)"}, {"id": 901, "n": "ONU RAISECOM HT803G-1GE"}, {"id": 476, "n": "ONU STAVIX MINI3 MP-G100Z - MP-G100R1"}, {"id": 352, "n": "ONU SUMEC (USO TODAS)"}, {"id": 521, "n": "ONU WIFI 6 F6630M"}, {"id": 954, "n": "ONU XPON XP-125"}, {"id": 886, "n": "ONU XPON XZ000-G7"}, {"id": 523, "n": "ONU ZTE MODELO ZXHN F643 - ZXA10 F601"}, {"id": 456, "n": "OTDR EKTECH QX55-P"}, {"id": 448, "n": "OTDR ORIENTEK MINI K330"}, {"id": 458, "n": "OTDR ORIENTEK T303"}, {"id": 417, "n": "OTDR ORIENTEK TR600"}, {"id": 904, "n": "PARKS FIBERLINK 100"}, {"id": 102, "n": "PARKS FIBERLINK 101 (MATRIZ)"}, {"id": 838, "n": "PLACA FIBERHOME UPLINK HU8A - LINHA 6000"}, {"id": 940, "n": "PLACA GCOB GPON 16 PORTAS C+ T1A SERIES RP1000 - R1A"}, {"id": 470, "n": "PLACA GPON FIBERHOME 5516-01 10-OLT GCOB 16 PORTAS C+ S1B - R1P"}, {"id": 1011, "n": "PLACA GPON FIBERHOME 5516-010 OLT EC8B C+ 8 PORTAS"}, {"id": 385, "n": "PLACA GPON FIBERHOME 5516-010 OLT GC8B C+ 8 PORTAS - R1P"}, {"id": 512, "n": "PLACA GPON FIBERHOME 5516-010 OLT GC8B C+ 8 PORTAS - S1B"}, {"id": 990, "n": "PLACA GPON FIBERHOME AN6000 OLT GPOA C+ 16 PORTAS - R1A/R2A"}, {"id": 840, "n": "PLACA GPON/XGS-PON FIBERHOME AN6000 OLT GFOA C+ 16 PORTAS"}, {"id": 1017, "n": "PLACA HUAWEI XSIC-C16H000 16X100GE S6780"}, {"id": 843, "n": "PLACA KU1B UPLINK FIBERHOME 100G - LINHA AN6000"}, {"id": 1033, "n": "PLACA S12700E SW HUAWEI 48/100GE QSFP28 LST7C24HX6E0"}, {"id": 415, "n": "POWER METER PON TPN-35 / KPN-35 ORIENTEK/KOMSHINE"}, {"id": 1032, "n": "POWER METTER PON JW3213B"}, {"id": 183, "n": "PROTETOR SOLAR FPS 60 - 2L"}, {"id": 502, "n": "QSFP 100G 10KM LR4-HWEI 1310NM"}, {"id": 975, "n": "QSFP28 100G 100M 850NM SR4 MM 4 WAVE MPO MMF - QSFP28-100G-SR4"}, {"id": 985, "n": "QSFP28 100G 20KM 1310NM LR4 4 WAVE DUPLEX LC SM"}, {"id": 962, "n": "QSFP28 100G 20KM PAM4 LC BIDI SIMPLEX HIGH WAVE DDM HUAWEI"}, {"id": 963, "n": "QSFP28 100G 20KM PAM4 LC BIDI SIMPLEX LOW WAVE DDM JUNIPER"}, {"id": 504, "n": "QSFP28 100G 40KM PAM4 LC BIDI SIMPLEX HIGH WAVE DDM HUAWEI"}, {"id": 505, "n": "QSFP28 100G 40KM PAM4 LC BIDI SIMPLEX LOW WAVE DDM JUNIPER"}, {"id": 1031, "n": "QSFP28 100G 80KM ZR4 1310NM LWDM wavelength LC SMF"}, {"id": 503, "n": "QSFP56DD 400G 10KM LR4 CWDM4 LC DDM"}, {"id": 988, "n": "QSFP56DD 400G 2KM FR4 CWDM4 LC DDM"}, {"id": 507, "n": "QSFP56DD 400G 30KM ER4 SMF/LC C-Temp DDM"}, {"id": 984, "n": "ROTEADOR 300 MPS RE707"}, {"id": 436, "n": "ROTEADOR ACTION RF 1200 (INTELBRAZ) MATRIZ"}, {"id": 123, "n": "ROTEADOR ACTION RG 1200 INTELBRAS (MATRIZ)"}, {"id": 906, "n": "ROTEADOR CIANET (RW 300N)"}, {"id": 517, "n": "ROTEADOR D-LINK DIR-615"}, {"id": 482, "n": "ROTEADOR D-LINK DIR-841 AC1200"}, {"id": 346, "n": "ROTEADOR D-LINK DIR-842"}, {"id": 345, "n": "ROTEADOR FURUKAWA FBS MODELO LD421-21W"}, {"id": 419, "n": "ROTEADOR GREATEK GIGABIT GWR1200AC"}, {"id": 338, "n": "ROTEADOR HUAWEI WIFI 6 WS7001-40 AX2 / WS7001"}, {"id": 353, "n": "ROTEADOR HUAWEI WIFI AX2S WS7000 V2"}, {"id": 340, "n": "ROTEADOR HUAWEI WIFI AX3S"}, {"id": 433, "n": "ROTEADOR HUAWEI WS5200V2 GIGA AC12004 ANT BC HUAWEI"}, {"id": 336, "n": "ROTEADOR HUAWEI WS5200V3 GIGA AC1300"}, {"id": 329, "n": "ROTEADOR INTELBRAS AC GIGA GF 1200 (MATRIZ)"}, {"id": 320, "n": "ROTEADOR INTELBRAS RX 1500 WIFI 6 (MATRIZ)"}, {"id": 889, "n": "ROTEADOR INTELBRAS W4-300F"}, {"id": 341, "n": "ROTEADOR MERCUSYS AC1200 AC12G"}, {"id": 474, "n": "ROTEADOR MERCUSYS MR30G AC1200"}, {"id": 473, "n": "ROTEADOR MERCUSYS MR70X"}, {"id": 525, "n": "ROTEADOR MERCUSYS MW301R 300MBPS"}, {"id": 874, "n": "ROTEADOR MERCUSYS MW325R 300MBPS"}, {"id": 1021, "n": "ROTEADOR MESH AC1200 RE010 MULTILASER"}, {"id": 875, "n": "ROTEADOR MULTILASER (RE708)"}, {"id": 969, "n": "ROTEADOR MULTILASER RE015"}, {"id": 897, "n": "ROTEADOR MULTILASER RE018"}, {"id": 399, "n": "ROTEADOR NE40E-M2KB EXPANSIVEL, 4*40GE+10*10GE, 2 FONTES AC"}, {"id": 959, "n": "ROTEADOR TDA NW1150"}, {"id": 439, "n": "ROTEADOR TENDA AC8"}, {"id": 481, "n": "ROTEADOR TENDA N301 300MBPS"}, {"id": 355, "n": "ROTEADOR TP-LINK (ARCHER C5W BRANCO)"}, {"id": 321, "n": "ROTEADOR TP-LINK - EC220-G5"}, {"id": 974, "n": "ROTEADOR TP-LINK - EC225-G5"}, {"id": 885, "n": "ROTEADOR TP-LINK AC1200 (ARCHER XR500V)"}, {"id": 432, "n": "ROTEADOR TP-LINK AC1200 / AC1300 (ARCHER C6)"}, {"id": 331, "n": "ROTEADOR TP-LINK ARCHER C20 - AC750 MBPS"}, {"id": 965, "n": "ROTEADOR TP-LINK ARCHER C21 AC750 DUAL BAND"}, {"id": 408, "n": "ROTEADOR TP-LINK ARCHER C5V (PRETO COM TELEFONIA)"}, {"id": 892, "n": "ROTEADOR TP-LINK AX1500 EX141"}, {"id": 964, "n": "ROTEADOR TP-LINK EX220 AX1800 DUAL BAND WIFI6"}, {"id": 124, "n": "ROTEADOR TP-LINK EX521 AX3000 WIFI 6 DUAL-BAND"}, {"id": 125, "n": "ROTEADOR TP-LINK TL WR749N 150MBPS"}, {"id": 126, "n": "ROTEADOR TP-LINK TL WR829N 300MBPS"}, {"id": 976, "n": "ROTEADOR TP-LINK TL-WR740N 150MBPS"}, {"id": 506, "n": "ROTEADOR TP-LINK TL-WR820N 300MBPS"}, {"id": 344, "n": "ROTEADOR TP-LINK TL-WR840N 300Mbps"}, {"id": 1024, "n": "ROTEADOR TP-LINK TL-WR841N 300MBPS"}, {"id": 131, "n": "ROTEADOR TP-LINK TL-WR849N-BR N 300MBPS"}, {"id": 915, "n": "ROTEADOR TP-LINK TL-WR940N 450MBPS"}, {"id": 127, "n": "ROTEADOR WIRELESS HOTSPOT"}, {"id": 870, "n": "ROTEADOR WIRELESS IWR 1000N 150Mbps (MATRIZ)"}, {"id": 128, "n": "ROTEADOR WIRELESS IWR 3000Mbps INTELBRAS (MATRIZ)"}, {"id": 129, "n": "ROTEADOR WIRELESS KLR 300 / 301"}, {"id": 130, "n": "ROTEADOR WIRELESS RF 301K 300Mbps INTELBRAS (MATRIZ)"}, {"id": 466, "n": "ROTEADOR WIRELESS W5-1200F INTELBRAS"}, {"id": 132, "n": "ROTEADOR WIRELESS W5-1200G INTELBRAS"}, {"id": 322, "n": "ROTEADOR WIRELESS W5-1200GS INTELBRAS"}, {"id": 133, "n": "ROTEADOR WIRELESS W5-2100G INTELBRAS"}, {"id": 996, "n": "ROTEADOR WIRELESS WIN 300 INTELBRAS"}, {"id": 1028, "n": "ROTEADOR WIRELESS WRN 342 SLIM N300"}, {"id": 1009, "n": "ROTEADOR WRN 150 - INTELBRAS (CYBER)"}, {"id": 354, "n": "ROTEADOR ZTE ZXHN H198A"}, {"id": 375, "n": "ROTEADOR ZTE ZXHN H199A"}, {"id": 134, "n": "ROTEADOR/ACESS POINT CORPORATIVO AP 1210 AC"}, {"id": 956, "n": "SERVIDOR DELL POWEREDGE R7615 - GGC - Global Google Cache"}, {"id": 461, "n": "SFP+ 10G 10KM LC DUPLEX DDM 1310NM 10G LR"}, {"id": 938, "n": "SFP+ 10G 40KM ER DDM 1550nm"}, {"id": 934, "n": "SFP+ 10G 40KM TX1270/RX1330NM 40KM BIDI SFP+ - WDM12-R40"}, {"id": 939, "n": "SFP+ 10G 40KM TX1330-RX1270NM LC BIDI SFP+ WDM13-R40"}, {"id": 912, "n": "SFP+ 10G 80KM BIDI 1330NM-1270NM BX80D-I C/CISCO"}, {"id": 913, "n": "SFP+ 10G 80KM BIDI1270NM-1330NM BX80U-I C/CISCO"}, {"id": 937, "n": "SFP+ 10G 850NM 300m TXM431 - SR"}, {"id": 914, "n": "SFP+ 10G LR 10KM SM LC DUPLEX DDM 1310NM TXM431-LR"}, {"id": 942, "n": "SFP+ 10G SR 850NM 300M MMF S+85DLC03D"}, {"id": 872, "n": "STORAGE DELL - POWERSTORE 500T (RAM 192GB, 10x SSD 3.84TB, RACK 9U, 4x TRANSCEPTOR OPTICO PADRAO SFP, 25GBE OPTICO (2x)"}, {"id": 850, "n": "SWITCH DATACOM - DM4380 12XS+3CX"}, {"id": 918, "n": "SWITCH DATACOM DM4270 24XS+2CX"}, {"id": 930, "n": "SWITCH DE ACESSO DATACOM - DM 4370 4GT+4GX+4XS"}, {"id": 867, "n": "SWITCH HUAWEI S6730 H24X6C"}, {"id": 148, "n": "TELEFONE COM FIO INTELBRAS TC20"}, {"id": 943, "n": "TELEFONE IP - TIP 125i"}, {"id": 1003, "n": "TP-LINK XX535 AX3000 DUAL-BAND WI-FI 6 XPON"}, {"id": 871, "n": "TUNING BOX - QSFP-DD/S FP-DD - TN100-QSDD-PL"}, {"id": 477, "n": "WIFI EPON ONU (HGW)"}, {"id": 960, "n": "WIRELESS RG-AP850-I(V2)(OT)"}, {"id": 929, "n": "XFP 10G BIDI 20KM LC 1270-1330NM WDM12-R20"}, {"id": 863, "n": "XFP 10G BIDI 20KM LC 1330-1270NM WDM13-R20"}, {"id": 527, "n": "XFP 10G LR LC 10KM 1310NM DUPLEX"}, {"id": 883, "n": "XPON ONU FD604GW-DG"}, {"id": 978, "n": "ZTE ZXHN H3601P"}];
+const PREFIXOS = {HWTC:"Huawei", ZTEG:"ZTE", ALCL:"Nokia/Alcatel", FHTT:"Fiberhome", TPLG:"TP-Link"};
+
+const $=id=>document.getElementById(id);
+const norm=s=>String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
+
+/* --------------------------- índice de modelos ---------------------------
+   Cada produto vira um conjunto de tokens. Os que têm dígito (HG8145V5, F670L,
+   EAP610) são os que realmente identificam o aparelho — palavras como ONT ou
+   HUAWEI aparecem em dezenas de linhas e valem pouco.                        */
+const INDICE = PRODUTOS.map(p=>{
+  const tk = norm(p.n).match(/[A-Z0-9]{3,}/g) || [];
+  return {...p, chave: tk.filter(t=>/\d/.test(t) && t.length>=4), tk};
+});
+
+const st = (()=>{ try{ localStorage.setItem("_t","1"); localStorage.removeItem("_t");
+    return {ok:true, g:(k,d)=>{try{return JSON.parse(localStorage.getItem("cl_"+k)) ?? d}catch(e){return d}},
+            s:(k,v)=>{try{localStorage.setItem("cl_"+k,JSON.stringify(v))}catch(e){}}}; }
+  catch(e){ return {ok:false, g:(k,d)=>d, s:()=>{}}; } })();
+
+/* As tags conhecidas. Para acrescentar outra, basta incluir aqui — o nome tem
+   de bater com o que aparece no HubSoft. */
+const TAGS = ["RETORNO DE TROCA", "RETORNO DE CANCELAMENTO", "RETORNO RECEPÇÃO"];
+
+let atual = {serial:null, mac:null, produto:null, origem:null};
+let TAG = st.g("tag", TAGS[0]);
+let ENDPOINT = st.g("endpoint",""), SEGREDO = st.g("segredo",""), OPERADOR = st.g("operador","");
+let cam=null, camOn=false, ultimo=0, poll=null, tally=st.g("tally",0), ocrWorker=null;
+
+/* ------------------------------ configuração ------------------------------ */
+const cfg = $("cfg");
+function cfgOpen(){ $("cfgUrl").value=ENDPOINT; $("cfgKey").value=SEGREDO; $("cfgQuem").value=OPERADOR; cfg.showModal(); }
+function cfgSave(){
+  ENDPOINT=$("cfgUrl").value.trim().replace(/\s/g,""); SEGREDO=$("cfgKey").value.trim();
+  OPERADOR=$("cfgQuem").value.trim();
+  st.s("endpoint",ENDPOINT); st.s("segredo",SEGREDO); st.s("operador",OPERADOR);
+  cfg.close(); pintaLink(); marcaQuem();
+  toast(ENDPOINT?"Envio configurado":"Envio desligado");
+}
+function marcaQuem(){ $("quem").textContent = OPERADOR ? "· "+OPERADOR : "· sem nome"; }
+function pintaLink(){ const l=$("link");
+  l.className = !ENDPOINT ? "link" : (navigator.onLine ? "link on" : "link off"); }
+addEventListener("online",pintaLink); addEventListener("offline",pintaLink);
+function pintaTags(){
+  $("tags").innerHTML = TAGS.map(t =>
+    `<button aria-pressed="${t===TAG}" onclick="escolherTag('${t.replace(/'/g,"\\'")}')">${t}</button>`
+  ).join("");
+}
+function escolherTag(t){ TAG=t; st.s("tag",t); pintaTags(); ficha(); }
+
+/* -------------------------------- leitura -------------------------------- */
+function classify(raw){
+  const s = String(raw).trim().toUpperCase().replace(/\s/g,"");
+  const hex = s.replace(/[:.-]/g,"");
+  if(/^[0-9A-F]{12}$/.test(hex) && !/^[A-Z]{4}[0-9A-F]{8}$/.test(s))
+    return {tipo:"mac", valor:hex.match(/.{2}/g).join(":")};      // MAC sempre com :
+  if(/^[A-Z]{4}[0-9A-F]{8}$/.test(s)) return {tipo:"sn", valor:s};
+  if(/^[A-Z0-9-]{6,24}$/.test(s))     return {tipo:"sn", valor:s};
+  return {tipo:"?", valor:s};
+}
+
+function onScan(raw){ const t=Date.now(); if(t-ultimo<1000) return; ultimo=t; feed(raw); }
+
+function feed(raw){
+  const {tipo,valor} = classify(raw);
+  if(tipo==="?"){ buzz([90,60,90]); return say("err","Código não reconhecido",valor); }
+
+  if(tipo==="mac"){
+    if(atual.mac===valor) return;
+    atual.mac=valor; buzz(35); say("ok","MAC lido",valor);
+  }else{
+    if(atual.serial===valor) return;
+    atual.serial=valor; buzz(35);
+    const fab = PREFIXOS[valor.slice(0,4)];
+    say("ok","Serial lido", valor+(fab?"  ·  "+fab:""));
+    if(!atual.produto && fab) sugerirPorFabricante(fab);
+  }
+  ficha();
+}
+
+function manual(){ const v=prompt("Serial ou MAC:"); if(v) feed(v); }
+
+/* ------------------------- modelo: OCR da etiqueta -------------------------
+   O código de barras traz serial e MAC, mas quase nunca o modelo — esse vem
+   impresso como texto. Por isso o OCR entra só aqui.                        */
+async function lerModelo(){
+  const video = document.querySelector("#reader video");
+  if(!video || !camOn) return say("warn","Câmera desligada","Ligue a câmera e enquadre a etiqueta.");
+
+  $("ocrBtn").disabled=true; $("ocrBtn").textContent="Lendo…";
+  say("idle","Lendo a etiqueta","Segure firme por um instante.");
+  try{
+    if(typeof Tesseract==="undefined") await carregarScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
+    if(!ocrWorker){ ocrWorker = await Tesseract.createWorker("eng");
+      await ocrWorker.setParameters({tessedit_char_whitelist:
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/. "}); }
+
+    const {data} = await ocrWorker.recognize(quadro(video));
+    const cands = casar(data.text||"");
+    if(!cands.length){
+      say("warn","Modelo não identificado","Aproxime mais ou escolha na lista.");
+      abrirBusca();
+    }else{
+      escolher(cands[0].id, "etiqueta");
+      if(cands.length>1) mostrar(cands.slice(1), "Outros parecidos");
+      say(cands[0].forte?"ok":"warn", cands[0].forte?"Modelo identificado":"Modelo provável — confira",
+          cands[0].n);
+      buzz(cands[0].forte?35:[60,40,60]);
+    }
+  }catch(e){
+    say("err","OCR falhou", String(e.message||e).slice(0,90));
+    abrirBusca();
+  }finally{ $("ocrBtn").disabled=false; $("ocrBtn").textContent="Ler modelo da etiqueta"; }
+}
+
+function carregarScript(src){ return new Promise((ok,no)=>{
+  const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("sem internet para baixar o OCR")); document.head.appendChild(s); }); }
+
+/** Recorta a faixa central, amplia e aumenta o contraste — etiqueta é texto pequeno. */
+function quadro(video){
+  const vw=video.videoWidth, vh=video.videoHeight;
+  const sx=vw*0.05, sy=vh*0.18, sw=vw*0.90, sh=vh*0.64, esc=2;
+  const c=document.createElement("canvas"); c.width=sw*esc; c.height=sh*esc;
+  const x=c.getContext("2d");
+  x.drawImage(video, sx,sy,sw,sh, 0,0,c.width,c.height);
+  const img=x.getImageData(0,0,c.width,c.height), d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    const v=g<110?0:(g>165?255:(g-110)*255/55);   // contraste duro
+    d[i]=d[i+1]=d[i+2]=v;
+  }
+  x.putImageData(img,0,0);
+  return c;
+}
+
+/** Casa o texto lido contra os 336 produtos. Tolera 1 caractere errado nos códigos. */
+function casar(texto){
+  const lidos = norm(texto).match(/[A-Z0-9]{3,}/g) || [];
+  if(!lidos.length) return [];
+  const set = new Set(lidos);
+
+  const notas = INDICE.map(p=>{
+    let n=0, forte=false;
+    for(const c of p.chave){
+      if(set.has(c)){ n+=10; forte=true; }
+      else if(lidos.some(l=>Math.abs(l.length-c.length)<=1 && perto(l,c))){ n+=6; forte=true; }
+    }
+    for(const t of p.tk) if(!/\d/.test(t) && set.has(t)) n+=1;
+    return {...p, nota:n, forte};
+  }).filter(p=>p.nota>=6);
+
+  notas.sort((a,b)=> b.nota-a.nota || a.tk.length-b.tk.length);
+  return notas.slice(0,4);
+}
+
+/** Distância de edição <= 1 — cobre o clássico 5 lido como S, 0 como O. */
+function perto(a,b){
+  if(a===b) return true;
+  if(Math.abs(a.length-b.length)>1) return false;
+  let i=0,j=0,dif=0;
+  while(i<a.length && j<b.length){
+    if(a[i]===b[j]){ i++;j++; continue; }
+    if(++dif>1) return false;
+    if(a.length>b.length) i++; else if(a.length<b.length) j++; else {i++;j++;}
+  }
+  return dif + (a.length-i) + (b.length-j) <= 1;
+}
+
+/* ---------------------------- escolha do modelo ---------------------------- */
+function sugerirPorFabricante(fab){
+  const f=norm(fab.split("/")[0]);
+  const hits=INDICE.filter(p=>p.tk.includes(f)).slice(0,6);
+  if(hits.length) mostrar(hits, "Modelos "+fab+" — ou leia a etiqueta");
+}
+function abrirBusca(){ $("buscaBox").classList.remove("hide"); $("prodSearch").focus(); }
+function search(q){
+  const t=norm(q.trim());
+  if(!t) return mostrar([],"");
+  const termos=t.split(/\s+/);
+  mostrar(INDICE.filter(p=>{const n=norm(p.n); return termos.every(x=>n.includes(x));}).slice(0,40), "");
+}
+function mostrar(lista, titulo){
+  $("buscaBox").classList.remove("hide");
+  const r=$("results");
+  if(!lista.length){ r.innerHTML=""; return; }
+  r.innerHTML = (titulo?`<button disabled style="color:var(--ink-dim);font-size:11px;letter-spacing:.1em;text-transform:uppercase">${titulo}</button>`:"")
+    + lista.map(p=>`<button onclick="escolher(${p.id},'lista')"><span class="pid">${p.id}</span>${p.n}</button>`).join("");
+}
+function escolher(id, origem){
+  atual.produto = PRODUTOS.find(p=>p.id===id) || null;
+  atual.origem = origem;
+  $("buscaBox").classList.add("hide"); $("results").innerHTML=""; $("prodSearch").value="";
+  ficha();
+}
+
+/* -------------------------------- a ficha -------------------------------- */
+function ficha(){
+  linha("cSerial", atual.serial, "bipe o código de barras");
+  linha("cMac", atual.mac, "bipe o segundo código");
+  const m=$("cModelo");
+  if(atual.produto){
+    m.className = "campo " + (atual.origem==="etiqueta" ? "duvida" : "pronto");
+    m.querySelector(".mark").textContent = atual.origem==="etiqueta" ? "!" : "✓";
+    m.querySelector(".v").className="v";
+    m.querySelector(".v").innerHTML = atual.produto.n +
+      (atual.origem==="etiqueta" ? "<small>lido da etiqueta — confira antes de enviar</small>"
+                                 : "<small>id "+atual.produto.id+"</small>");
+  }else{
+    m.className="campo"; m.querySelector(".mark").textContent="";
+    m.querySelector(".v").className="v vazio";
+    m.querySelector(".v").textContent="leia a etiqueta ou escolha";
+  }
+  const ct=$("cTag");
+  ct.className="campo pronto"; ct.querySelector(".mark").textContent="✓";
+  ct.querySelector(".v").className="v"; ct.querySelector(".v").textContent=TAG;
+
+  $("sendBtn").disabled = !(atual.serial && atual.produto);
+  $("sendBtn").textContent = atual.serial && atual.produto && !atual.mac
+    ? "Enviar sem MAC" : "Enviar para cadastro";
+}
+function linha(id, valor, vazio){
+  const e=$(id);
+  e.className = "campo"+(valor?" pronto":"");
+  e.querySelector(".mark").textContent = valor?"✓":"";
+  const v=e.querySelector(".v");
+  v.className = "v"+(valor?"":" vazio");
+  v.textContent = valor || vazio;
+}
+
+/* --------------------------------- envio --------------------------------- */
+async function enviar(){
+  if(!ENDPOINT) return say("err","Envio não configurado","Toque na engrenagem e cole a URL do Apps Script.");
+  if(!navigator.onLine) return say("err","Sem internet","Aguarde o sinal voltar — os dados estão na tela.");
+
+  telaStatus();
+  passo("e1","agora","enviando…");
+  try{
+    const r = await fetch(ENDPOINT, {
+      method:"POST",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},   // evita o preflight que o Apps Script não responde
+      body: JSON.stringify({segredo:SEGREDO, item:{
+        serial:atual.serial, mac:atual.mac||"", id_produto:atual.produto.id,
+        produto:atual.produto.n, tag:TAG, tipo:"entrada",
+        operador:OPERADOR||"?"}})
+    });
+    const res = await r.json();
+    if(!res.ok) throw new Error(res.erro||"recusado pela planilha");
+
+    passo("e1","feito", res.repetido ? "já estava na fila" : "linha criada na planilha");
+    passo("e2","agora","o computador varre a fila a cada 2 segundos");
+    acompanhar();
+  }catch(e){
+    passo("e1","falhou", String(e.message||e).slice(0,120));
+    veredito("err","✕","Não chegou na planilha",
+      "O aparelho não foi enviado. Confira o sinal e a configuração, depois tente de novo.");
+  }
+}
+
+/** Pergunta à planilha, a cada 2s, em que pé está o cadastro deste serial. */
+function acompanhar(){
+  const alvo = atual.serial;
+  let voltas = 0;
+  clearInterval(poll);
+  poll = setInterval(async ()=>{
+    if(++voltas > 60){   // ~2 min
+      clearInterval(poll);
+      passo("e3","falhou","sem resposta");
+      veredito("warn","⏱","Demorou mais que o normal",
+        "A linha está na planilha e o cadastro pode concluir depois. Verifique se o worker está rodando no PC.");
+      return;
+    }
+    try{
+      const u = ENDPOINT+"?serial="+encodeURIComponent(alvo)+"&segredo="+encodeURIComponent(SEGREDO);
+      const res = await (await fetch(u)).json();
+      if(!res.ok) return;
+      aplicar(res.status, res.mensagem||"");
+    }catch(e){ /* rede oscilando: a próxima volta tenta de novo */ }
+  }, 2000);
+}
+
+function aplicar(status, msg){
+  if(status==="PENDENTE"){ passo("e2","agora","aguardando o worker pegar"); return; }
+  passo("e2","feito","o worker pegou este aparelho");
+
+  if(status==="PROCESSANDO"){ passo("e3","agora","consultando o HubSoft…"); return; }
+
+  clearInterval(poll);
+  if(status==="OK"){
+    passo("e3","feito","serial e MAC livres"); passo("e4","feito", msg||"patrimônio criado");
+    tally++; st.s("tally",tally); $("tally").textContent=tally;
+    veredito("ok","✓","Equipamento cadastrado", msg||"Já está no estoque do HubSoft.");
+    buzz([40,60,40]);
+  }else if(status==="DUPLICADO"){
+    passo("e3","falhou","serial já existe");
+    veredito("warn","≡","Já estava cadastrado",
+      "Esse serial já tem patrimônio no HubSoft. Nada foi criado — separe o aparelho para conferência.");
+    buzz([70,50,70]);
+  }else if(status==="CONFLITO"){
+    passo("e3","falhou", msg||"MAC em uso");
+    veredito("err","⚠","MAC já está em outro patrimônio",
+      (msg||"")+" — dois equipamentos com o mesmo MAC derrubam a autenticação dos dois. Separe este aparelho.");
+    buzz([90,60,90,60,90]);
+  }else if(status==="REVISAR"){
+    passo("e3","falhou", msg||"precisa de tratamento manual");
+    veredito("warn","✋","Parou para revisão", msg||"O worker não trata este caso sozinho.");
+  }else if(status==="ERRO"){
+    passo("e3","falhou", msg||"falhou no HubSoft");
+    veredito("err","✕","Não deu para cadastrar", msg||"Veja o worker.log no computador.");
+    buzz([90,60,90]);
+  }else if(status==="AUSENTE"){
+    passo("e2","falhou","a linha sumiu da planilha");
+    clearInterval(poll);
+    veredito("err","✕","Linha não encontrada","Alguém pode ter apagado a linha da planilha.");
+  }
+}
+
+function reenviar(){ enviar(); }
+
+function proximo(){
+  clearInterval(poll);
+  atual = {serial:null, mac:null, produto:null, origem:null};
+  ficha(); say("idle","Pronto para o próximo","Bipe a etiqueta do aparelho.");
+  $("telaStatus").classList.add("hide"); $("rodapeStatus").classList.add("hide");
+  $("linhaErro").classList.add("hide");
+  $("telaCaptura").classList.remove("hide"); $("rodapeCaptura").classList.remove("hide");
+  ["e1","e2","e3","e4"].forEach(id=>{ $(id).className="etapa"; $("s"+id[1]).textContent="…"; });
+  $("vereditoBox").innerHTML=""; $("nextBtn").disabled=true; $("nextBtn").textContent="Aguarde…";
+  scrollTo(0,0);
+}
+
+/* ------------------------------ telas e passos ---------------------------- */
+function telaStatus(){
+  $("telaCaptura").classList.add("hide"); $("rodapeCaptura").classList.add("hide");
+  $("telaStatus").classList.remove("hide"); $("rodapeStatus").classList.remove("hide");
+  $("resumo").innerHTML = atual.produto.n+"<br>"+atual.serial+(atual.mac?"  ·  "+atual.mac:"")
+    +"<br>"+TAG;
+  scrollTo(0,0);
+}
+function passo(id, estado, txt){
+  $(id).className = "etapa "+estado;
+  $("s"+id[1]).textContent = txt;
+}
+function veredito(tipo, icone, titulo, texto){
+  $("vereditoBox").innerHTML =
+    `<div class="veredito ${tipo}"><div class="icone">${icone}</div><h2>${titulo}</h2><p>${texto}</p></div>`;
+  const b=$("nextBtn");
+  if(tipo==="ok"){ b.disabled=false; b.textContent="Cadastrar outro equipamento"; $("linhaErro").classList.add("hide"); }
+  else{ b.classList.add("hide"); $("linhaErro").classList.remove("hide"); }
+}
+
+/* --------------------------------- câmera ---------------------------------
+   A câmera só é liberada em contexto seguro (https ou localhost). Abrir o
+   arquivo direto (file://) ou pelo preview do Drive bloqueia sem avisar — por
+   isso o diagnóstico aparece antes de o operador tentar e achar que quebrou. */
+function aviso(html){ const a=$("aviso"); a.innerHTML=html; a.classList.remove("hide"); }
+
+function checarContexto(){
+  const proto = location.protocol, host = location.hostname;
+  const ehLocal = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+
+  // Lista de permitidos, não de proibidos: file://, content://, blob:// e
+  // afins todos falham, e nenhum deles dá para consertar liberando permissão.
+  if(!(proto === "https:" || (proto === "http:" && ehLocal))){
+    const arquivoSalvo = proto === "file:" || proto === "content:";
+    aviso(`<b>A câmera não abre deste jeito</b>` + (arquivoSalvo
+      ? `Você abriu o <b>arquivo salvo no aparelho</b> (<code>${proto}//</code>).
+         Assim a página não tem endereço, e o Chrome não tem a quem liberar a câmera —
+         não é permissão, é o modo de abrir.`
+      : `Esta página está em <code>${proto}//</code> e a câmera exige
+         <code>https://</code>.`) +
+      `<br><br>No PC rode <code>python servir.py</code> e digite no Chrome o endereço
+       <code>https://…:8443/coletor-estoque.html</code> que ele mostrar.`);
+    return false;
+  }
+  if(!window.isSecureContext){
+    aviso(`<b>Endereço não considerado seguro</b>Esta página está em
+      <code>${proto}//${host}</code>. Use o endereço do <code>servir.py</code>.`);
+    return false;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    aviso(`<b>Navegador sem acesso à câmera</b>Tente pelo Chrome (Android) ou
+      Safari (iPhone). Enquanto isso, o botão “Digitar código” funciona.`);
+    return false;
+  }
+  return true;
+}
+
+/** Traduz o erro da câmera para algo que dê para agir. */
+function motivoCamera(e){
+  const n = (e && (e.name || e.message) || "").toString();
+  if(/NotAllowed|Permission/i.test(n))
+    return ["Permissão negada","Toque no cadeado ao lado do endereço e libere a câmera para este site."];
+  if(/NotFound|Devices/i.test(n))
+    return ["Nenhuma câmera encontrada","O navegador não achou câmera neste aparelho."];
+  if(/NotReadable|TrackStart/i.test(n))
+    return ["Câmera ocupada","Feche o app de câmera ou outra aba que esteja usando ela."];
+  if(/Security|Insecure/i.test(n))
+    return ["Endereço não seguro","A câmera exige https. Use o servir.py no PC."];
+  return ["Câmera não abriu", String(n).slice(0,100)];
+}
+
+function toggleCam(){
+  if(!checarContexto())
+    return say("err","Câmera indisponível","Veja o aviso vermelho no topo da tela.");
+  if(typeof Html5Qrcode==="undefined")
+    return say("err","Leitor não carregou","Precisa de internet na primeira abertura. Use “Digitar código”.");
+  if(camOn){ cam.stop().then(()=>{camOn=false; $("camBtn").textContent="Ligar câmera";}); return; }
+  cam = cam || new Html5Qrcode("reader");
+  const fmt = window.Html5QrcodeSupportedFormats ? [
+    Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.DATA_MATRIX,
+    Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.ITF] : undefined;
+  cam.start({facingMode:"environment"}, {fps:12, qrbox:{width:290,height:190}, formatsToSupport:fmt}, onScan, ()=>{})
+    .then(()=>{ camOn=true; $("camBtn").textContent="Desligar câmera"; $("aviso").classList.add("hide");
+      say("idle","Câmera ligada","Bipe os códigos; depois toque em Ler modelo."); })
+    .catch(e=>{ const [t,m]=motivoCamera(e); say("err",t,m); });
+}
+
+/* --------------------------------- utilidades ----------------------------- */
+function say(k,t,m){ const s=$("status"); s.className="status"+(k==="idle"?"":" "+k);
+  s.children[0].textContent=t; s.children[1].textContent=m; }
+function buzz(p){ if(navigator.vibrate) navigator.vibrate(p); }
+function toast(t,bad){ const e=$("toast"); e.textContent=t; e.className="toast on"+(bad?" bad":"");
+  setTimeout(()=>e.className="toast"+(bad?" bad":""),2200); }
+
+if(!TAGS.includes(TAG)) TAG=TAGS[0];
+pintaTags();
+$("tally").textContent = tally;
+$("persistHint").textContent = st.ok ? "" : "Aviso: este navegador bloqueou o armazenamento local.";
+marcaQuem(); pintaLink(); ficha(); checarContexto();
+
+/* ------------------------ instalação na tela de início ------------------------
+   Android dispara beforeinstallprompt e dá um botão de verdade. iOS não tem
+   esse evento: lá só existe Compartilhar > Adicionar à Tela de Início, então o
+   caminho tem que ser dito por escrito. */
+let promptInstalar = null;
+const jaInstalado = () => window.matchMedia("(display-mode: standalone)").matches
+                       || window.navigator.standalone === true;
+
+addEventListener("beforeinstallprompt", e => {
+  e.preventDefault(); promptInstalar = e; convite("android");
+});
+
+function convite(plataforma){
+  if(jaInstalado() || st.g("naoInstalar", false)) return;
+  const el = $("instalar");
+  el.innerHTML = plataforma === "android"
+    ? `<span>Instale o <b>Coletor</b> na tela de início — abre em tela cheia e
+        funciona sem sinal.</span>
+       <button onclick="instalar()">Instalar</button>
+       <button class="x" onclick="dispensar()" aria-label="Dispensar">×</button>`
+    : `<span>Para instalar no iPhone: toque em <b>Compartilhar</b> e depois em
+        <b>Adicionar à Tela de Início</b>.</span>
+       <button class="x" onclick="dispensar()" aria-label="Dispensar">×</button>`;
+  el.classList.remove("hide");
+}
+
+async function instalar(){
+  if(!promptInstalar) return dispensar();
+  promptInstalar.prompt();
+  const r = await promptInstalar.userChoice;
+  promptInstalar = null;
+  $("instalar").classList.add("hide");
+  if(r.outcome === "accepted") toast("Instalado — abra pelo ícone");
+}
+function dispensar(){ st.s("naoInstalar", true); $("instalar").classList.add("hide"); }
+
+// iOS: sem evento, então detecta o aparelho
+const ehIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+           || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+if(ehIOS && !jaInstalado()) convite("ios");
+
+if("serviceWorker" in navigator && location.protocol === "https:"){
+  addEventListener("load", () => navigator.serviceWorker.register("./sw.js")
+    .catch(e => console.warn("service worker não registrou:", e)));
+}
+</script>
+</body>
+</html>
