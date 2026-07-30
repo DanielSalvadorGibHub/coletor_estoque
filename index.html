@@ -60,6 +60,13 @@
   .scanbox{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#000;margin-bottom:10px}
   #reader{width:100%} #reader video{display:block;width:100%!important}
 
+  .fotos{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px}
+  .fotos figure{margin:0;flex:none;width:78px;text-align:center}
+  .fotos img{width:78px;height:78px;object-fit:cover;border-radius:9px;background:#000;
+    border:1px solid var(--line);display:block}
+  .fotos figcaption{font-size:9px;color:var(--ink-dim);margin-top:4px;font-family:var(--mono)}
+  .fotos .add{width:78px;height:78px;border:1px dashed var(--line);border-radius:9px;
+    background:none;color:var(--ink-dim);font-size:24px;cursor:pointer}
   .previa{display:flex;gap:11px;border:1px solid var(--line);border-radius:12px;
     background:var(--panel);padding:10px;margin:12px 0}
   .previa img{width:104px;height:104px;object-fit:cover;border-radius:9px;flex:none;background:#000}
@@ -105,6 +112,10 @@
     cursor:pointer;padding:4px 2px;flex:none;letter-spacing:.06em}
   .campo .v small{display:block;font-family:var(--sans);font-size:10px;color:var(--ink-dim);
     letter-spacing:.06em;margin-top:3px;text-transform:uppercase}
+  .campo.conflito{background:#2C1517} .campo.conflito .mark{color:var(--err)}
+  .campo .opc{display:block;margin-top:6px}
+  .campo .opc button{background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+    font-family:var(--mono);font-size:12px;padding:6px 9px;border-radius:7px;margin:3px 5px 0 0;cursor:pointer}
   .campo.duvida{background:#2C2312} .campo.duvida .mark{color:var(--warn)}
   .tags{display:grid;gap:7px}
   .tags button{padding:14px 12px;border:1px solid var(--line);background:var(--panel);
@@ -189,26 +200,16 @@
 <!-- ============================ TELA 1: CAPTURA ============================ -->
 <div class="wrap" id="telaCaptura">
 
-  <div class="scanbox"><div id="reader"></div></div>
-  <div class="ctrl hide" id="ctrl">
-    <button id="torchBtn" class="hide" onclick="lanterna()">🔦 Lanterna</button>
-    <label id="zoomBox" class="hide"><span>Zoom</span>
-      <input type="range" id="zoom" min="1" max="4" step="0.1" value="1" oninput="aplicarZoom(this.value)">
-    </label>
-  </div>
-  <button class="btn btn-main" id="camBtn" onclick="toggleCam()">Ligar câmera</button>
-  <button class="btn btn-main btn-lg hide" id="fotoBtn" onclick="fotografar()">Fotografar etiqueta</button>
+  <button class="btn btn-main btn-lg" onclick="$('camFoto').click()">Fotografar etiqueta</button>
   <div class="btn-row">
-    <button class="btn btn-ghost" onclick="$('arquivo').click()">Foto da galeria</button>
+    <button class="btn btn-ghost" onclick="$('arquivo').click()">Da galeria</button>
     <button class="btn btn-ghost" onclick="manual()">Digitar código</button>
   </div>
-  <input type="file" id="arquivo" accept="image/*" class="hide"
-         onchange="daGaleria(this)">
-  <div id="previaBox" class="previa hide">
-    <img id="previa" alt="foto analisada">
-    <div class="previaTxt"><b>Foto analisada</b><span id="previaInfo"></span>
-      <button onclick="$('arquivo').click()">Trocar foto</button></div>
-  </div>
+  <input type="file" id="camFoto" accept="image/*" capture="environment" class="hide" onchange="daFoto(this)">
+  <input type="file" id="arquivo" accept="image/*" class="hide" onchange="daFoto(this)">
+  <div id="leitorOculto" class="hide"></div>
+
+  <div id="fotos" class="fotos hide"></div>
 
   <div class="ficha">
     <div class="fichaTopo">
@@ -340,7 +341,7 @@ const TAGS = ["RETORNO DE TROCA", "RETORNO DE CANCELAMENTO", "RETORNO RECEPÇÃO
 let atual = {serial:null, mac:null, produto:null, src:{}};
 let TAG = st.g("tag", TAGS[0]);
 let ENDPOINT = st.g("endpoint",""), SEGREDO = st.g("segredo",""), OPERADOR = st.g("operador","");
-let cam=null, camOn=false, ultimo=0, poll=null, tally=st.g("tally",0), ocrWorker=null;
+let poll=null, tally=st.g("tally",0), ocrWorker=null;
 
 /* ------------------------------ configuração ------------------------------ */
 const cfg = $("cfg");
@@ -363,134 +364,142 @@ function pintaTags(){
 }
 function escolherTag(t){ TAG=t; st.s("tag",t); pintaTags(); ficha(); }
 
-/* -------------------------------- leitura -------------------------------- */
+/* ============================ LEITURA POR EVIDÊNCIA ========================
+   Cada foto contribui com evidências, não com verdades. Um valor acumula pontos
+   conforme de onde veio e quantas vezes apareceu:
+
+       código de barras ............ 100   é exato
+       texto ao lado do rótulo MAC/SN  60   contexto forte
+       texto solto no meio da etiqueta 40   pode ser outra coisa
+
+   Duas fotos concordando somam. Por isso duas leituras de texto (40+40=80)
+   passam a valer mais que uma leitura com rótulo, e o campo fica verde.
+   Quando dois valores diferentes têm força parecida, ninguém decide sozinho:
+   a ficha mostra os dois e o operador escolhe.
+========================================================================= */
+
+const PESO = {codigo:100, rotulo:60, solto:40};
+let evid = {serial:{}, mac:{}, produto:{}};
+let fotos = [];
+
+function registrar(campo, valor, peso, origem){
+  if(valor === null || valor === undefined || valor === "") return;
+  const chave = String(valor);
+  const e = evid[campo][chave] || {pontos:0, origens:[]};
+  e.pontos += peso;
+  if(!e.origens.includes(origem)) e.origens.push(origem);
+  evid[campo][chave] = e;
+}
+
+/** Escolhe o valor vencedor de um campo e diz o quanto dá para confiar nele. */
+function consolidar(campo){
+  const ents = Object.entries(evid[campo]).sort((a,b) => b[1].pontos - a[1].pontos);
+  if(!ents.length) return null;
+
+  const [valor, e] = ents[0];
+  const segundo = ents[1];
+  // conflito de verdade: o segundo colocado também tem força própria
+  const conflito = !!segundo && segundo[1].pontos >= PESO.solto
+                             && segundo[1].pontos >= e.pontos * 0.6;
+
+  return {
+    valor, pontos: e.pontos, origens: e.origens, conflito,
+    outros: ents.slice(1,3).map(x => x[0]),
+    nivel: e.pontos >= PESO.codigo ? "certo"
+         : e.pontos >= 80 ? "confirmado"
+         : "duvida"
+  };
+}
+
+function aplicarEvidencias(){
+  for(const campo of ["serial","mac"]){
+    const c = consolidar(campo);
+    atual[campo] = c ? c.valor : null;
+    atual.src[campo] = c;
+  }
+  const cp = consolidar("produto");
+  if(cp){
+    atual.produto = PRODUTOS.find(p => p.id === Number(cp.valor)) || null;
+    atual.src.produto = cp;
+  }else{
+    atual.produto = null; atual.src.produto = null;
+  }
+  ficha();
+}
+
+/** O operador desempata um conflito: o escolhido ganha peso de decisão humana. */
+function decidir(campo, valor){
+  registrar(campo, valor, 200, "você escolheu");
+  aplicarEvidencias();
+  say("ok","Escolha registrada", campo === "produto"
+      ? (atual.produto ? atual.produto.n : valor) : valor);
+}
+
 function classify(raw){
   const s = String(raw).trim().toUpperCase().replace(/\s/g,"");
   const hex = s.replace(/[:.-]/g,"");
   if(/^[0-9A-F]{12}$/.test(hex) && !/^[A-Z]{4}[0-9A-F]{8}$/.test(s))
-    return {tipo:"mac", valor:hex.match(/.{2}/g).join(":")};      // MAC sempre com :
+    return {tipo:"mac", valor:hex.match(/.{2}/g).join(":")};
   if(/^[A-Z]{4}[0-9A-F]{8}$/.test(s)) return {tipo:"sn", valor:s};
   if(/^[A-Z0-9-]{6,24}$/.test(s))     return {tipo:"sn", valor:s};
   return {tipo:"?", valor:s};
 }
 
-function onScan(raw){ const t=Date.now(); if(t-ultimo<1000) return; ultimo=t; feed(raw); }
-
-function feed(raw){
-  const {tipo,valor} = classify(raw);
-  if(tipo==="?"){ buzz([90,60,90]); return say("err","Código não reconhecido",valor); }
-
-  if(tipo==="mac"){
-    if(atual.mac===valor) return;
-    atual.mac=valor; atual.src.mac="codigo";
-  }else{
-    if(atual.serial===valor) return;
-    atual.serial=valor; atual.src.serial="codigo";
-  }
-  ficha();
-  aposCodigo(tipo, valor);
-}
-
-/* Cada código lido pela câmera cai aqui. O objetivo é que o operador nunca
-   precise tocar em nada: varre a etiqueta, os dois campos enchem sozinhos, e o
-   modelo é identificado em seguida. */
-let ocrAutomatico = false;
-
-function aposCodigo(tipo, valor){
-  const falta = [];
-  if(!atual.serial) falta.push("serial");
-  if(!atual.mac) falta.push("MAC");
-
-  if(falta.length){
-    buzz(35);
-    const fab = tipo==="sn" ? PREFIXOS[valor.slice(0,4)] : null;
-    say("ok", tipo==="mac" ? "MAC capturado" : "Serial capturado",
-        valor + (fab ? "  ·  "+fab : "") + "  —  falta " + falta.join(" e "));
-    return;
-  }
-
-  buzz([40,60,40]);
-
-  if(atual.produto){
-    say("ok","Serial e MAC capturados","Confira a ficha e envie.");
-    return;
-  }
-  if(camOn && !ocrAutomatico){
-    // os dois códigos entraram; o modelo é a única coisa que falta e ela só
-    // existe como texto impresso, então vale disparar o OCR sem pedir
-    ocrAutomatico = true;
-    say("ok","Serial e MAC capturados","Identificando o modelo pela etiqueta…");
-    fotografar();
-  }else{
-    say("ok","Serial e MAC capturados","Escolha o modelo para poder enviar.");
-  }
+function manual(){
+  const v = prompt("Serial ou MAC:");
+  if(!v) return;
+  const {tipo, valor} = classify(v);
+  if(tipo === "?") return say("err","Não reconheci", valor);
+  registrar(tipo === "mac" ? "mac" : "serial", valor, 200, "digitado");
+  aplicarEvidencias();
+  say("ok", tipo === "mac" ? "MAC digitado" : "Serial digitado", valor);
+  buzz(30);
 }
 
 function limpar(){
-  const temAlgo = atual.serial || atual.mac || atual.produto;
-  if(!temAlgo) return;
-  if(!confirm("Limpar serial, MAC e modelo deste item?")) return;
-  atual = {serial:null, mac:null, produto:null, src:{}};
-  ocrAutomatico = false;
-  $("buscaBox").classList.add("hide"); $("results").innerHTML="";
-  $("previaBox").classList.add("hide");
-  ficha();
-  say("idle","Campos limpos", camOn ? "Varra a etiqueta do próximo aparelho."
-                                    : "Ligue a câmera e varra a etiqueta.");
+  if(!(atual.serial || atual.mac || atual.produto || fotos.length)) return;
+  if(!confirm("Limpar tudo deste item, inclusive as fotos analisadas?")) return;
+  zerar();
+  say("idle","Tudo limpo","Fotografe a etiqueta do próximo aparelho.");
   buzz(20);
 }
 
-function manual(){
-  const v=prompt("Serial ou MAC:");
-  if(!v) return;
-  const antes={s:atual.serial, m:atual.mac};
-  feed(v);
-  if(atual.serial!==antes.s) atual.src.serial="manual";
-  if(atual.mac!==antes.m) atual.src.mac="manual";
+function zerar(){
+  atual = {serial:null, mac:null, produto:null, src:{}};
+  evid = {serial:{}, mac:{}, produto:{}};
+  fotos.forEach(f => URL.revokeObjectURL(f.url));
+  fotos = [];
+  $("fotos").classList.add("hide"); $("fotos").innerHTML = "";
+  $("buscaBox").classList.add("hide"); $("results").innerHTML = "";
   ficha();
 }
 
-/* =========================== FOTO DA ETIQUETA =============================
-   Uma foto, duas leituras na mesma imagem:
+/* ============================== FOTOS ==================================== */
 
-     códigos de barras  -> exatos. O que der para ler aqui é verdade.
-     texto (OCR)        -> preenche o que faltou, mas erra 0/O, 1/I, 5/S, 8/B.
-
-   Por isso o que vem de código de barras fica verde e o que vem da foto fica
-   âmbar. Um caractere trocado num MAC vira equipamento fantasma na rede, e
-   ninguém descobre pela tela — descobre pelo cliente reclamando.
-========================================================================== */
-
-async function fotografar(){
-  const video = document.querySelector("#reader video");
-  if(!video || !camOn) return say("warn","Câmera desligada","Ligue a câmera e enquadre a etiqueta.");
-  $("previaBox").classList.add("hide");
-  await analisar(video, $("fotoBtn"), "Fotografar etiqueta");
-}
-
-/* ------------------------------ foto da galeria ---------------------------
-   Caminho preferido quando a leitura ao vivo dá trabalho: o app de câmera do
-   celular tem foco macro, HDR e flash de verdade, e você confere se a foto
-   saiu nítida antes de mandar analisar. */
-async function daGaleria(input){
+async function daFoto(input){
   const file = input.files && input.files[0];
-  input.value = "";                       // permite escolher a mesma foto de novo
+  input.value = "";
   if(!file) return;
 
   let img;
-  try{
-    img = await carregarImagem(file);
-  }catch(e){
-    return say("err","Não consegui abrir a foto",
-               "Formato não suportado. Tire de novo pela câmera do celular.");
-  }
+  try{ img = await carregarImagem(file); }
+  catch(e){ return say("err","Não consegui abrir a foto","Tire de novo pela câmera do celular."); }
 
-  // prévia: mostra o que foi analisado, e serve para julgar se estava nítida
-  $("previa").src = URL.createObjectURL(file);
-  $("previaInfo").textContent = `${img.width}×${img.height} · ${Math.round(file.size/1024)} KB`;
-  $("previaBox").classList.remove("hide");
+  const n = fotos.length + 1;
+  fotos.push({url: URL.createObjectURL(file), n, info:`${img.width}×${img.height}`, campos:0});
+  pintarFotos();
 
-  await analisar(img, null, null);
+  await analisar(img, file, n);
+}
+
+function pintarFotos(){
+  const el = $("fotos");
+  if(!fotos.length){ el.classList.add("hide"); el.innerHTML=""; return; }
+  el.classList.remove("hide");
+  el.innerHTML = fotos.map(f =>
+      `<figure><img src="${f.url}" alt="foto ${f.n}">
+       <figcaption>#${f.n}${f.campos ? " · +"+f.campos : ""}</figcaption></figure>`).join("")
+    + `<button class="add" onclick="$('camFoto').click()" title="Mais uma foto">+</button>`;
 }
 
 function carregarImagem(file){
@@ -498,8 +507,6 @@ function carregarImagem(file){
     return createImageBitmap(file).catch(() => viaElemento(file));
   return viaElemento(file);
 }
-
-/** Reserva para quando createImageBitmap não aceitar o formato (HEIC do iPhone). */
 function viaElemento(file){
   return new Promise((ok,no)=>{
     const im = new Image();
@@ -509,95 +516,105 @@ function viaElemento(file){
   });
 }
 
-/* ---------------------- o miolo, comum aos dois caminhos ------------------ */
-async function analisar(fonte, botao, rotuloBotao){
-  const texto0 = botao ? botao.textContent : null;
-  if(botao){ botao.disabled = true; botao.textContent = "Lendo a etiqueta…"; }
-  say("idle","Lendo a etiqueta", botao ? "Segure firme por um instante." : "Analisando a foto…");
+/* --------------------------- o miolo da análise -------------------------- */
+async function analisar(img, file, n){
+  const antes = contarPreenchidos();
+  say("idle", `Analisando foto ${n}`, "Códigos de barras primeiro…");
 
   try{
-    // 1) códigos de barras — exatos, e na foto da galeria costumam sair melhor
-    //    porque a imagem é bem maior que o quadro do vídeo
-    const codigos = await lerCodigos(fonte);
+    // 1) códigos de barras — exatos
+    const codigos = await lerCodigos(img, file);
     for(const bruto of codigos){
       const {tipo, valor} = classify(bruto);
-      if(tipo==="mac" && !atual.mac){ atual.mac=valor; atual.src.mac="codigo"; }
-      else if(tipo==="sn" && !atual.serial){ atual.serial=valor; atual.src.serial="codigo"; }
+      if(tipo !== "?") registrar(tipo === "mac" ? "mac" : "serial", valor, PESO.codigo, `foto ${n}`);
     }
-    ficha();
+    aplicarEvidencias();
 
     // 2) texto, etiqueta clara
-    let texto = await lerTexto(quadro(fonte, "normal"));
+    say("idle", `Analisando foto ${n}`, "Lendo o texto da etiqueta…");
+    let texto = await lerTexto(quadro(img, "normal"));
     let cands = casar(texto);
-    let invertida = false;
 
-    // 3) etiqueta escura (Intelbras), só se a primeira não achou o modelo
+    // 3) etiqueta escura (Intelbras) — só quando a primeira passada não achou
     if(!cands.length){
-      if(botao) botao.textContent = "Tentando etiqueta escura…";
-      say("idle","Etiqueta escura","Tentando ler o texto invertido…");
-      const texto2 = await lerTexto(quadro(fonte, "invertido"));
-      const cands2 = casar(texto2);
-      if(cands2.length){ cands = cands2; invertida = true; }
-      texto = texto + "\n" + texto2;
+      say("idle", `Analisando foto ${n}`, "Tentando como etiqueta escura…");
+      const t2 = await lerTexto(quadro(img, "invertido"));
+      const c2 = casar(t2);
+      if(c2.length) cands = c2;
+      texto += "\n" + t2;
     }
 
     const doTexto = extrair(texto);
-    if(!atual.mac && doTexto.mac){ atual.mac=doTexto.mac; atual.src.mac="foto"; }
-    if(!atual.serial && doTexto.serial){ atual.serial=doTexto.serial; atual.src.serial="foto"; }
+    if(doTexto.mac)    registrar("mac", doTexto.mac.valor, doTexto.mac.peso, `foto ${n}`);
+    if(doTexto.serial) registrar("serial", doTexto.serial.valor, doTexto.serial.peso, `foto ${n}`);
 
-    if(!atual.produto && cands.length){
-      escolher(cands[0].id, "foto");
-      if(cands.length>1) mostrar(cands.slice(1), "Não é esse? Outros parecidos");
-    }
+    // o modelo entra com peso proporcional à força do casamento
+    cands.slice(0,2).forEach((c,i) =>
+      registrar("produto", c.id, i === 0 ? (c.forte ? PESO.rotulo : PESO.solto) : 20, `foto ${n}`));
 
-    ficha();
-    relatar(codigos.length, doTexto, invertida);
+    aplicarEvidencias();
+
+    const ganho = contarPreenchidos() - antes;
+    fotos[n-1].campos = ganho;
+    pintarFotos();
+    relatar(n, ganho, codigos.length);
 
   }catch(e){
-    say("err","Não deu para ler", String(e.message||e).slice(0,100));
-  }finally{
-    if(botao){ botao.disabled=false; botao.textContent = rotuloBotao || texto0; }
+    say("err", `Foto ${n} não deu para ler`, String(e.message||e).slice(0,90));
   }
 }
 
-/** Conta o que entrou e o que falta, em vez de só dizer "pronto". */
-function relatar(qtdCodigos, doTexto, invertida){
+const contarPreenchidos = () => ["serial","mac","produto"].filter(k => atual[k]).length;
+
+function relatar(n, ganho, qtdCodigos){
   const falta = [];
   if(!atual.serial) falta.push("serial");
   if(!atual.mac) falta.push("MAC");
   if(!atual.produto) falta.push("modelo");
 
-  const daFoto = Object.keys(atual.src).filter(k=>atual.src[k]==="foto").length;
-
-  if(!falta.length){
-    let msg = qtdCodigos
-      ? `${qtdCodigos} código(s) de barras lido(s)` + (daFoto?` · ${daFoto} campo(s) da foto`:"")
-      : "tudo lido do texto da etiqueta";
-    if(invertida) msg += " · etiqueta escura";
-    say(daFoto ? "warn" : "ok", daFoto ? "Preenchido — confira o que está em âmbar" : "Tudo lido", msg);
-    buzz(daFoto ? [60,40,60] : [40,60,40]);
-  }else{
-    say("warn","Faltou "+falta.join(" e "),
-        "Aproxime mais e fotografe de novo, ou bipe o código que faltou.");
-    buzz([70,50,70]);
+  const conflitos = ["serial","mac","produto"].filter(k => atual.src[k] && atual.src[k].conflito);
+  if(conflitos.length){
+    buzz([90,60,90]);
+    return say("err","Leituras diferentes em " + conflitos.join(" e "),
+               "Toque no valor certo na ficha para desempatar.");
   }
+  if(falta.length){
+    buzz([70,50,70]);
+    return say("warn", `Foto ${n}: falta ` + falta.join(" e "),
+      "Tire outra foto mais perto do que faltou — as leituras se somam.");
+  }
+  const fracos = ["serial","mac"].filter(k => atual.src[k] && atual.src[k].nivel === "duvida");
+  buzz(fracos.length ? [60,40,60] : [40,60,40]);
+  say(fracos.length ? "warn" : "ok",
+      fracos.length ? "Completo — confira o que está em âmbar" : "Completo e confirmado",
+      qtdCodigos ? `${qtdCodigos} código(s) de barras nesta foto` : "lido do texto da etiqueta");
 }
 
-/** Detecta TODOS os códigos de barras de uma vez. Recebe o vídeo direto: o
-    detector nativo aceita o elemento, então não precisa copiar o quadro para
-    uma tela — que era outra cópia de 33 megapixels à toa. */
-async function lerCodigos(video){
-  if(!("BarcodeDetector" in window)) return [];   // iPhone cai aqui
-  try{
-    const det = new BarcodeDetector({formats:
-      ["code_128","code_39","code_93","qr_code","data_matrix","itf","codabar","ean_13"]});
-    const achados = await det.detect(video);
-    return achados.map(a=>a.rawValue).filter(Boolean);
-  }catch(e){ return []; }
+/* ----------------------------- leitores brutos --------------------------- */
+
+/** Todos os códigos de barras da imagem. No iPhone cai na reserva por arquivo. */
+async function lerCodigos(img, file){
+  if("BarcodeDetector" in window){
+    try{
+      const det = new BarcodeDetector({formats:
+        ["code_128","code_39","code_93","qr_code","data_matrix","itf","codabar","ean_13"]});
+      const achados = await det.detect(img);
+      if(achados.length) return achados.map(a=>a.rawValue).filter(Boolean);
+    }catch(e){}
+  }
+  // reserva para iPhone: o html5-qrcode decodifica um código do arquivo
+  if(file && typeof Html5Qrcode !== "undefined"){
+    try{
+      const inst = new Html5Qrcode("leitorOculto", {verbose:false});
+      const r = await inst.scanFileV2(file, false);
+      return r && r.decodedText ? [r.decodedText] : [];
+    }catch(e){}
+  }
+  return [];
 }
 
 async function lerTexto(canvas){
-  if(typeof Tesseract==="undefined")
+  if(typeof Tesseract === "undefined")
     await carregarScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
   if(!ocrWorker){
     ocrWorker = await Tesseract.createWorker("eng");
@@ -612,21 +629,19 @@ function carregarScript(src){ return new Promise((ok,no)=>{
   const s=document.createElement("script"); s.src=src; s.onload=ok;
   s.onerror=()=>no(new Error("sem internet para baixar o leitor de texto")); document.head.appendChild(s); }); }
 
-/* Prepara a imagem para o OCR.
-   O tamanho é limitado de propósito: com a câmera em 4K, ampliar o quadro dava
-   uma tela de 33 milhões de pixels e travava o aparelho. Além disso o Tesseract
-   não fica melhor com imagem gigante — fica pior e muito mais lento. Cerca de
-   1800px no lado maior é o ponto onde ele lê bem e rápido.
-
-   modo "invertido" existe para as etiquetas de fundo preto com texto branco,
-   como as da Intelbras: o OCR só entende texto escuro sobre claro. */
+/* Prepara a imagem para o OCR. O tamanho é limitado de propósito: foto de
+   celular tem 12 megapixels ou mais, e o Tesseract não fica melhor com imagem
+   gigante — fica pior e muito mais lento. Cerca de 1800px no lado maior é onde
+   ele lê bem e rápido.
+   O modo "invertido" existe para etiqueta de fundo preto com texto branco, como
+   as da Intelbras: o OCR só entende texto escuro sobre claro. */
 const LADO_OCR = 1800;
 
 function quadro(src, modo){
   const vw = src.videoWidth || src.width, vh = src.videoHeight || src.height;
   if(!vw || !vh) throw new Error("imagem sem tamanho");
 
-  const esc = Math.min(2, LADO_OCR / Math.max(vw, vh));   // reduz o 4K, amplia o pequeno
+  const esc = Math.min(2, LADO_OCR / Math.max(vw, vh));
   const c = document.createElement("canvas");
   c.width = Math.round(vw*esc); c.height = Math.round(vh*esc);
   const x = c.getContext("2d", {willReadFrequently:true});
@@ -637,7 +652,7 @@ function quadro(src, modo){
   const inv = modo === "invertido";
   for(let i=0; i<d.length; i+=4){
     let g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-    if(inv) g = 255 - g;                       // branco-no-preto vira preto-no-branco
+    if(inv) g = 255 - g;
     const v = g<105 ? 0 : (g>170 ? 255 : (g-105)*255/65);
     d[i]=d[i+1]=d[i+2]=v;
   }
@@ -646,34 +661,29 @@ function quadro(src, modo){
 }
 
 /* ------------------------- extrair MAC e serial do texto -------------------
-   A troca clássica do OCR em código impresso pequeno. Só aplico dentro de
-   trechos que já são quase hexadecimal — corrigir demais inventa dado. */
-/* SÓ letras que NÃO são hexadecimais entram aqui. B, C, D, E e F são dígitos
+   SÓ letras que NÃO são hexadecimais entram aqui. B, C, D, E e F são dígitos
    hex válidos — trocá-los destrói MAC e serial corretos, que é pior que não
-   corrigir nada. Testado: HWTC8A1B2C3D e AA:BB:CC:DD:EE:F0 têm de sair intactos. */
+   corrigir nada. Testado: HWTC8A1B2C3D e AA:BB:CC:DD:EE:F0 saem intactos. */
 const TROCA = {O:"0", Q:"0", I:"1", L:"1", J:"1", S:"5", Z:"2", G:"6", T:"7"};
 const paraHex = t => t.replace(/[OQILJSZGT]/g, c => TROCA[c]);
 const quaseHex = t => ((t.match(/[0-9A-F]/g)||[]).length / t.length) >= 0.6;
 
 function extrair(texto){
   const T = texto.toUpperCase().replace(/[^A-Z0-9:.\-\n/ ]/g, " ");
-  const out = {mac:null, serial:null, viaRotulo:[]};
+  const out = {mac:null, serial:null};
 
-  // ---- MAC: primeiro perto do rótulo, que é bem mais confiável
   let m = T.match(/MAC[^A-Z0-9]{0,10}([0-9A-Z:.\- ]{12,26})/);
   if(m){
     const cand = limparHex(m[1]);
-    if(cand){ out.mac = cand; out.viaRotulo.push("MAC"); }
+    if(cand) out.mac = {valor:cand, peso:PESO.rotulo};
   }
   if(!out.mac){
     for(const bruto of (T.match(/[0-9A-Z]{2}(?:[:. -]?[0-9A-Z]{2}){5}/g) || [])){
       const cand = limparHex(bruto);
-      if(cand){ out.mac = cand; break; }
+      if(cand){ out.mac = {valor:cand, peso:PESO.solto}; break; }
     }
   }
 
-  // ---- Serial GPON: 4 letras + 8 hexadecimais
-  let s = T.match(/(?:GPON\s*S\s*\/?\s*N|S\s*\/\s*N|SN|SERIAL)[^A-Z0-9]{0,10}([A-Z0-9]{8,20})/);
   const testar = (v) => {
     if(!v) return null;
     const t = v.replace(/[^A-Z0-9]/g,"");
@@ -681,20 +691,21 @@ function extrair(texto){
     const c = t.length >= 12 ? t.slice(0,4) + paraHex(t.slice(4,12)) : t;
     return /^[A-Z]{4}[0-9A-F]{8}$/.test(c) ? c : (/^[A-Z0-9-]{6,24}$/.test(t) ? t : null);
   };
-  if(s){
-    const v = testar(s[1]);
-    if(v){ out.serial = v; out.viaRotulo.push("S/N"); }
+
+  let sm = T.match(/(?:GPON\s*S\s*\/?\s*N|S\s*\/\s*N|SN|SERIAL)[^A-Z0-9]{0,10}([A-Z0-9]{8,20})/);
+  if(sm){
+    const v = testar(sm[1]);
+    if(v) out.serial = {valor:v, peso:PESO.rotulo};
   }
   if(!out.serial){
     for(const bruto of (T.match(/\b[A-Z]{4}[A-Z0-9]{8}\b/g) || [])){
       const v = testar(bruto);
-      if(v && /^[A-Z]{4}[0-9A-F]{8}$/.test(v)){ out.serial = v; break; }
+      if(v && /^[A-Z]{4}[0-9A-F]{8}$/.test(v)){ out.serial = {valor:v, peso:PESO.solto}; break; }
     }
   }
   return out;
 }
 
-/** Devolve o MAC no formato AA:BB:CC:11:22:33, ou null se não for confiável. */
 function limparHex(bruto){
   const t = bruto.replace(/[^A-Z0-9]/g, "");
   if(t.length !== 12) return null;
@@ -737,11 +748,6 @@ function perto(a,b){
 }
 
 /* ---------------------------- escolha do modelo ---------------------------- */
-function sugerirPorFabricante(fab){
-  const f=norm(fab.split("/")[0]);
-  const hits=INDICE.filter(p=>p.tk.includes(f)).slice(0,6);
-  if(hits.length) mostrar(hits, "Modelos "+fab+" — ou leia a etiqueta");
-}
 function abrirBusca(){ $("buscaBox").classList.remove("hide"); $("prodSearch").focus(); }
 function search(q){
   const t=norm(q.trim());
@@ -763,38 +769,61 @@ function escolher(id, origem){
   ficha();
 }
 
-/* -------------------------------- a ficha -------------------------------- */
-const ROTULO = {codigo:"código de barras", foto:"lido da foto — confira", manual:"digitado"};
-
+/* -------------------------------- a ficha --------------------------------
+   A cor diz o quanto dá para confiar, e é o que o operador olha antes de enviar:
+     verde  = código de barras, ou duas fotos concordando
+     âmbar  = uma leitura de texto só — confira
+     vermelho = leituras diferentes, escolha qual vale                        */
 function ficha(){
-  campo("cSerial", atual.serial, "fotografe ou bipe a etiqueta", "serial");
-  campo("cMac", atual.mac, "fotografe ou bipe a etiqueta", "mac");
-  campo("cModelo", atual.produto && atual.produto.n, "fotografe ou escolha", "produto",
-        atual.produto && ("id " + atual.produto.id));
+  campo("cSerial", "serial", atual.serial, "fotografe a etiqueta");
+  campo("cMac", "mac", atual.mac, "fotografe a etiqueta");
+  campo("cModelo", "produto", atual.produto && atual.produto.n, "fotografe ou escolha");
 
   const ct=$("cTag");
   ct.className="campo pronto"; ct.querySelector(".mark").textContent="✓";
   ct.querySelector(".v").className="v"; ct.querySelector(".v").textContent=TAG;
 
-  $("limparBtn").disabled = !(atual.serial || atual.mac || atual.produto);
-  $("sendBtn").disabled = !(atual.serial && atual.produto);
-  $("sendBtn").textContent = atual.serial && atual.produto && !atual.mac
-    ? "Enviar sem MAC" : "Enviar para cadastro";
+  const conflito = ["serial","mac","produto"].some(k => atual.src[k] && atual.src[k].conflito);
+  $("limparBtn").disabled = !(atual.serial || atual.mac || atual.produto || fotos.length);
+  $("sendBtn").disabled = !(atual.serial && atual.produto) || conflito;
+  $("sendBtn").textContent = conflito ? "Desempate antes de enviar"
+    : (atual.serial && atual.produto && !atual.mac ? "Enviar sem MAC" : "Enviar para cadastro");
 }
 
-function campo(id, valor, vazio, chave, extra){
-  const e=$(id), v=e.querySelector(".v"), src=atual.src[chave];
+const NIVEL = {certo:"código de barras", confirmado:"confirmado em 2 leituras",
+               duvida:"lido da foto — confira"};
+
+function campo(id, chave, valor, vazio){
+  const e=$(id), v=e.querySelector(".v"), c=atual.src[chave];
+
   if(!valor){
     e.className="campo"; e.querySelector(".mark").textContent="";
     v.className="v vazio"; v.textContent=vazio; return;
   }
-  // origem "foto" fica âmbar: OCR erra 0/O, 1/I, 5/S e 8/B, e um caractere
-  // trocado num MAC é dado errado que ninguém percebe depois
-  const duvida = src === "foto";
-  e.className = "campo " + (duvida ? "duvida" : "pronto");
-  e.querySelector(".mark").textContent = duvida ? "!" : "✓";
-  v.className="v";
-  v.innerHTML = valor + `<small>${ROTULO[src] || ""}${extra && !duvida ? " · "+extra : ""}</small>`;
+
+  const estado = !c ? "pronto"
+               : c.conflito ? "conflito"
+               : c.nivel === "duvida" ? "duvida" : "pronto";
+  e.className = "campo " + estado;
+  e.querySelector(".mark").textContent = estado==="conflito" ? "≠" : (estado==="duvida" ? "!" : "✓");
+  v.className = "v";
+
+  let nota = c ? (NIVEL[c.nivel] || "") : "digitado";
+  if(c && c.origens.length) nota += " · " + c.origens.join(", ");
+
+  let html = valor + `<small>${nota}</small>`;
+
+  // conflito: os dois valores viram botões, o operador desempata
+  if(c && c.conflito){
+    const rotulo = x => chave === "produto"
+      ? ((PRODUTOS.find(p=>p.id===Number(x))||{}).n || x) : x;
+    html = `<b>Duas leituras diferentes</b><span class="opc">`
+      + [c.valor, ...c.outros].map(x =>
+          `<button onclick="decidir('${chave}','${String(x).replace(/'/g,"")}')">${rotulo(x)}</button>`
+        ).join("")
+      + `</span>`;
+  }
+  v.innerHTML = html;
 }
 
 /* --------------------------------- envio --------------------------------- */
@@ -888,14 +917,11 @@ function reenviar(){ enviar(); }
 
 function proximo(){
   clearInterval(poll);
-  atual = {serial:null, mac:null, produto:null, src:{}};
-  ocrAutomatico = false;
-  ficha(); say("idle","Pronto para o próximo","Bipe a etiqueta do aparelho.");
+  zerar(); say("idle","Pronto para o próximo","Bipe a etiqueta do aparelho.");
   $("telaStatus").classList.add("hide"); $("rodapeStatus").classList.add("hide");
   $("linhaErro").classList.add("hide");
   $("telaCaptura").classList.remove("hide"); $("rodapeCaptura").classList.remove("hide");
   ["e1","e2","e3","e4"].forEach(id=>{ $(id).className="etapa"; $("s"+id[1]).textContent="…"; });
-  $("previaBox").classList.add("hide");
   $("vereditoBox").innerHTML=""; $("nextBtn").disabled=true; $("nextBtn").textContent="Aguarde…";
   scrollTo(0,0);
 }
@@ -920,175 +946,23 @@ function veredito(tipo, icone, titulo, texto){
   else{ b.classList.add("hide"); $("linhaErro").classList.remove("hide"); }
 }
 
-/* --------------------------------- câmera ---------------------------------
-   A câmera só é liberada em contexto seguro (https ou localhost). Abrir o
-   arquivo direto (file://) ou pelo preview do Drive bloqueia sem avisar — por
-   isso o diagnóstico aparece antes de o operador tentar e achar que quebrou. */
+/* ------------------------- contexto seguro --------------------------------
+   A câmera do celular é aberta pelo app nativo, via input de arquivo, então não
+   exige https. Mas o service worker e a instalação exigem, e é bom avisar. */
 function aviso(html){ const a=$("aviso"); a.innerHTML=html; a.classList.remove("hide"); }
 
 function checarContexto(){
   const proto = location.protocol, host = location.hostname;
-  const ehLocal = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  const ehLocal = host==="localhost" || host==="127.0.0.1" || host==="[::1]";
+  if(proto==="https:" || (proto==="http:" && ehLocal)) return true;
 
-  // Lista de permitidos, não de proibidos: file://, content://, blob:// e
-  // afins todos falham, e nenhum deles dá para consertar liberando permissão.
-  if(!(proto === "https:" || (proto === "http:" && ehLocal))){
-    const arquivoSalvo = proto === "file:" || proto === "content:";
-    aviso(`<b>A câmera não abre deste jeito</b>` + (arquivoSalvo
-      ? `Você abriu o <b>arquivo salvo no aparelho</b> (<code>${proto}//</code>).
-         Assim a página não tem endereço, e o Chrome não tem a quem liberar a câmera —
-         não é permissão, é o modo de abrir.`
-      : `Esta página está em <code>${proto}//</code> e a câmera exige
-         <code>https://</code>.`) +
-      `<br><br>No PC rode <code>python servir.py</code> e digite no Chrome o endereço
-       <code>https://…:8443/coletor-estoque.html</code> que ele mostrar.`);
-    return false;
-  }
-  if(!window.isSecureContext){
-    aviso(`<b>Endereço não considerado seguro</b>Esta página está em
-      <code>${proto}//${host}</code>. Use o endereço do <code>servir.py</code>.`);
-    return false;
-  }
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    aviso(`<b>Navegador sem acesso à câmera</b>Tente pelo Chrome (Android) ou
-      Safari (iPhone). Enquanto isso, o botão “Digitar código” funciona.`);
-    return false;
-  }
-  return true;
-}
-
-/** Traduz o erro da câmera para algo que dê para agir. */
-function motivoCamera(e){
-  const n = (e && (e.name || e.message) || "").toString();
-  if(/NotAllowed|Permission/i.test(n))
-    return ["Permissão negada","Toque no cadeado ao lado do endereço e libere a câmera para este site."];
-  if(/NotFound|Devices/i.test(n))
-    return ["Nenhuma câmera encontrada","O navegador não achou câmera neste aparelho."];
-  if(/NotReadable|TrackStart/i.test(n))
-    return ["Câmera ocupada","Feche o app de câmera ou outra aba que esteja usando ela."];
-  if(/Security|Insecure/i.test(n))
-    return ["Endereço não seguro","A câmera exige https. Use o servir.py no PC."];
-  return ["Câmera não abriu", String(n).slice(0,100)];
-}
-
-function toggleCam(){
-  if(!checarContexto())
-    return say("err","Câmera indisponível","Veja o aviso vermelho no topo da tela.");
-  if(typeof Html5Qrcode==="undefined")
-    return say("err","Leitor não carregou","Precisa de internet na primeira abertura. Use “Digitar código”.");
-  if(camOn){ cam.stop().then(()=>{camOn=false; torchOn=false;
-    $("camBtn").textContent="Ligar câmera";
-    $("fotoBtn").classList.add("hide"); $("ctrl").classList.add("hide");
-    $("torchBtn").className="hide"; }); return; }
-  cam = cam || new Html5Qrcode("reader");
-  const fmt = window.Html5QrcodeSupportedFormats ? [
-    Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
-    Html5QrcodeSupportedFormats.CODE_93, Html5QrcodeSupportedFormats.QR_CODE,
-    Html5QrcodeSupportedFormats.DATA_MATRIX, Html5QrcodeSupportedFormats.ITF,
-    Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.EAN_13] : undefined;
-
-  cam.start(
-    { facingMode: "environment" },
-    {
-      fps: 10,
-      // Caixa larga e baixa: código de barras 1D é comprido e fininho, e a
-      // caixa quadrada padrão cortava as pontas das etiquetas de ONU.
-      qrbox: (larg, alt) => ({ width: Math.floor(larg*0.92), height: Math.floor(alt*0.42) }),
-      formatsToSupport: fmt,
-      // Resolução alta importa mais que qualquer outra coisa em código pequeno.
-      videoConstraints: {
-        facingMode: "environment",
-        // Pede alto de propósito: o navegador entrega o maior modo que a
-        // câmera tiver e ignora o excesso. Depois de iniciar, prepararControles
-        // lê as capacidades reais e empurra para o máximo de verdade.
-        width:  { ideal: 3840 },
-        height: { ideal: 2160 },
-        advanced: [{ focusMode: "continuous" }]
-      },
-      // Usa o detector nativo do Android quando existe — muito mais forte que
-      // o decodificador em JavaScript, principalmente com etiqueta amassada.
-      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-      disableFlip: true
-    },
-    onScan, ()=>{})
-    .then(()=>{ camOn=true; $("camBtn").textContent="Desligar câmera"; $("aviso").classList.add("hide");
-      $("fotoBtn").classList.remove("hide"); $("ctrl").classList.remove("hide");
-      say("idle","Câmera ligada","Ajustando resolução e luz…");
-      prepararControles(); })
-    .catch(e=>{ const [t,m]=motivoCamera(e); say("err",t,m); });
-}
-
-/* ---------------------- lanterna e zoom ------------------------------------
-   Etiqueta de ONU é pequena e costuma estar em prateleira mal iluminada. Luz e
-   aproximação resolvem mais casos de leitura falha que qualquer ajuste de
-   algoritmo. Só aparecem se o aparelho suportar. */
-let torchOn = false;
-
-async function prepararControles(){
-  let cap = {};
-  try { cap = cam.getRunningTrackCapabilities() || {}; } catch(e){}
-
-  // 1) resolução: sobe para o máximo real da câmera
-  try{
-    if(cap.width && cap.height){
-      await cam.applyVideoConstraints({
-        width:  { ideal: cap.width.max },
-        height: { ideal: cap.height.max },
-        advanced: [{ focusMode: "continuous" }]
-      });
-    }
-  }catch(e){ /* alguns aparelhos recusam; segue no modo inicial */ }
-
-  // 2) lanterna: liga sozinha, como pedido, mas respeita quem desligou antes
-  if("torch" in cap){
-    $("torchBtn").classList.remove("hide");
-    if(st.g("lanterna", true)){
-      try{
-        await cam.applyVideoConstraints({ advanced: [{ torch: true }] });
-        torchOn = true; $("torchBtn").className = "on";
-      }catch(e){ torchOn = false; }
-    }
-  }else $("torchBtn").classList.add("hide");
-
-  // 3) zoom, se houver
-  if(cap.zoom){
-    const z=$("zoom");
-    z.min = cap.zoom.min ?? 1;
-    z.max = Math.min(cap.zoom.max ?? 4, 8);
-    z.step = cap.zoom.step || 0.1;
-    z.value = cap.zoom.min ?? 1;
-    $("zoomBox").classList.remove("hide");
-  }else $("zoomBox").classList.add("hide");
-
-  relatarCamera(cap);
-}
-
-/** Mostra o que a câmera realmente entregou — serve para saber se ajudou. */
-function relatarCamera(cap){
-  const v = document.querySelector("#reader video");
-  const larg = v && v.videoWidth, alt = v && v.videoHeight;
-  const partes = [];
-  if(larg) partes.push(larg + "×" + alt);
-  if(torchOn) partes.push("lanterna ligada");
-  if(cap && cap.zoom) partes.push("zoom disponível");
-  say("idle","Câmera ligada",
-      (partes.join("  ·  ") || "pronta") + "  —  varra a etiqueta.");
-}
-
-async function lanterna(){
-  try{
-    torchOn = !torchOn;
-    await cam.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
-    $("torchBtn").className = torchOn ? "on" : "";
-    st.s("lanterna", torchOn);          // da próxima vez abre como você deixou
-  }catch(e){
-    torchOn = false;
-    say("warn","Lanterna indisponível","Este aparelho não deixa ligar a luz pelo navegador.");
-  }
-}
-
-async function aplicarZoom(v){
-  try{ await cam.applyVideoConstraints({ advanced: [{ zoom: Number(v) }] }); }catch(e){}
+  const arquivoSalvo = proto==="file:" || proto==="content:";
+  aviso(`<b>Abra pelo endereço, não pelo arquivo</b>` + (arquivoSalvo
+    ? `Você abriu o arquivo salvo no aparelho (<code>${proto}//</code>). Assim o app
+       não instala nem guarda a configuração.`
+    : `Esta página está em <code>${proto}//</code>.`) +
+    `<br><br>Use o endereço <code>https://</code> publicado no GitHub Pages.`);
+  return false;
 }
 
 /* --------------------------------- utilidades ----------------------------- */
